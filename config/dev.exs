@@ -1,11 +1,13 @@
 import Config
 
 # Configure your database
+{worktree_suffix, _} = Code.eval_file(Path.expand("worktree_suffix.exs", __DIR__))
+
 config :night_shift, NightShift.Repo,
   username: "postgres",
   password: "postgres",
   hostname: "localhost",
-  database: "night_shift_dev",
+  database: "night_shift_dev#{worktree_suffix}",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10

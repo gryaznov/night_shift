@@ -9,18 +9,7 @@ config :bcrypt_elixir, :log_rounds, 1
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 
-worktree_suffix =
-  case System.cmd("git", ["rev-parse", "--absolute-git-dir"], stderr_to_stdout: true) do
-    {dir, 0} ->
-      dir = String.trim(dir)
-
-      if Path.basename(Path.dirname(dir)) == "worktrees",
-        do: "_" <> String.replace(Path.basename(dir), ~r/\D/, ""),
-        else: ""
-
-    _ ->
-      ""
-  end
+{worktree_suffix, _} = Code.eval_file(Path.expand("worktree_suffix.exs", __DIR__))
 
 config :night_shift, NightShift.Repo,
   username: "postgres",

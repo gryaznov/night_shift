@@ -124,6 +124,32 @@ defmodule NightShift.Members do
   end
 
   @doc """
+  Moves `target` to another site or team within the same tenant.
+
+  `actor` must be an active manager of `target`'s tenant. Changing a site or a
+  team changes which two groups the member is in, because group membership is
+  derived from this record and nothing else — no group is edited here.
+
+  Refusals, none of which change anything:
+
+    * `{:error, :forbidden}` — `actor` is not an active manager, or `target`
+      belongs to another tenant.
+    * `{:error, :already_inactive}` — `target` is deactivated; a member with no
+      access is not moved, they are re-created.
+
+  Only `:site_id` and `:team` can be changed. Role changes and reactivation are
+  not this function's business, and `:tenant_id` and `:user_id` are never
+  writable.
+  """
+  @spec update_assignment(Member.t(), Member.t(), map()) ::
+          {:ok, Member.t()}
+          | {:error, :forbidden | :already_inactive}
+          | {:error, Ecto.Changeset.t()}
+  def update_assignment(%Member{} = _actor, %Member{} = _target, attrs) when is_map(attrs) do
+    raise "not implemented"
+  end
+
+  @doc """
   Deactivates `target`, ending their access to that tenant from that moment.
 
   `actor` may deactivate any member of their own tenant, themselves included.

@@ -9,9 +9,11 @@ defmodule NightShift.Tenancy do
   function accepts one.
 
   Every tenant-schema query passes `prefix: Tenancy.prefix(tenant)`, and every
-  broadcast uses `Tenancy.topic(tenant, key)`, so no topic can cross tenants.
+  broadcast uses `Tenancy.topic(tenant, key)` or `Tenancy.group_topic(tenant,
+  group)`, so no topic can cross tenants.
   """
 
+  alias NightShift.Chat.Group
   alias NightShift.Tenants.Tenant
 
   @typedoc "The subject of a topic within one tenant, for example `:members`."
@@ -31,4 +33,14 @@ defmodule NightShift.Tenancy do
   """
   @spec topic(Tenant.t(), topic_key()) :: String.t()
   def topic(%Tenant{schema: schema}, key) when is_atom(key), do: "tenant:#{schema}:#{key}"
+
+  @doc """
+  The PubSub topic for one group of `tenant`.
+
+  Takes the group struct rather than its id, so a topic can only be built from a
+  group already read out of that tenant's schema — `/chat/:id` carries an id, and
+  `NightShift.Chat.get_group/2` is what turns it into a struct.
+  """
+  @spec group_topic(Tenant.t(), Group.t()) :: String.t()
+  def group_topic(%Tenant{schema: schema}, %Group{id: id}), do: "tenant:#{schema}:group:#{id}"
 end

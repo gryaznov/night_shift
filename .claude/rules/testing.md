@@ -10,7 +10,9 @@ paths:
 - Context tests: `test/night_shift/`, `use NighShift.DataCase`.
 - LiveView tests: `test/night_shift_web/live/`, `use NighShiftWeb.ConnCase`.
 - Tenant data comes only from fixture helpers in `test/support/fixtures/`.
-  A tenant is created with `tenant_fixture/0`; never call Triplex directly
+  `tenant_fixture/0` hands out one of the two tenants `NightShift.TenantSetup`
+  provisions before the suite starts; `tenant_fixture(:two)` is the other side
+  of an isolation test. Neither creates a schema. Never call Triplex directly
   from a test.
 - Tests touching tenant schemas are `async: false` (schema DDL and sandbox).
   Provisional — revisit if the suite exceeds 30s.

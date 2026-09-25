@@ -1,6 +1,6 @@
 # 0001 — Foundation: tenants, members, access
 
-Status: draft
+Status: done
 Brief: none
 
 ## Intent
@@ -235,10 +235,11 @@ touching tenant schemas, so one schema per tenant suffices.
     confirmation routes, LiveViews, their generated tests and the
     now-unused `Accounts` functions. Verify: `/verify` green; routes absent.
     **Awaiting ruling; blocks nothing above.**
-15. [x] Wrap: DECISIONS entries for the context rename, for public `members`
-    superseding DECISIONS 0003, and for the test-tenant strategy; amend
-    invariant 1 to admit `members`; update `.claude/rules/testing.md`; mark
-    this plan done. **FLAG: edits an invariant.**
+15. [x] Wrap: DECISIONS 0006-0011 drafted, invariant 3 amended to say that
+    `active` is re-read where it is acted on (invariant 1 was already amended to
+    admit `members` at step 2), `.claude/rules/testing.md` updated for the two
+    persistent test tenants, `docs/CHANGELOG.md` started. **FLAG: edits an
+    invariant.**
 
 ## Notes / deviations
 

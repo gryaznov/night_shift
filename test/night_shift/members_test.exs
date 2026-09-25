@@ -246,4 +246,109 @@ defmodule NightShift.MembersTest do
       assert {:error, :forbidden} = Members.list_members(manager, tenant)
     end
   end
+
+  # Plan 0002, ruling 2: criterion 3 ("a member whose site or team changes
+  # stops seeing the old groups and sees the new ones, without any further
+  # action") is served entirely by this function. There is no member-edit
+  # screen in 0002, so its effect on which groups are listed is covered in
+  # `NightShift.ChatTest`, not here.
+  describe "update_assignment/3 (plan 0002 criterion 3: moves a member; manager only, same tenant, liveness re-read)" do
+    test "a manager moves a staff member of their own tenant to another site and team" do
+      tenant = tenant_fixture(:one)
+      manager = member_fixture(tenant, role: :manager)
+      old_site = site_fixture(tenant)
+      new_site = site_fixture(tenant)
+      target = member_fixture(tenant, site_id: old_site.id, team: :kitchen)
+
+      assert {:ok, updated} =
+               Members.update_assignment(manager, target, %{site_id: new_site.id, team: :bar})
+
+      assert updated.site_id == new_site.id
+      assert updated.team == :bar
+
+      assert %Member{site_id: site_id, team: team} = Repo.get!(Member, target.id)
+      assert site_id == new_site.id
+      assert team == :bar
+    end
+
+    test "only site_id and team are writable: role, tenant_id and user_id do not change" do
+      tenant = tenant_fixture(:one)
+      other_tenant = tenant_fixture(:two)
+      manager = member_fixture(tenant, role: :manager)
+      new_site = site_fixture(tenant)
+      other_user = user_fixture()
+      target = member_fixture(tenant, role: :staff)
+
+      assert {:ok, updated} =
+               Members.update_assignment(manager, target, %{
+                 site_id: new_site.id,
+                 team: :bar,
+                 role: :manager,
+                 tenant_id: other_tenant.id,
+                 user_id: other_user.id
+               })
+
+      assert updated.role == :staff
+      assert updated.tenant_id == tenant.id
+      assert updated.user_id == target.user_id
+    end
+
+    test "a staff member can never move another member (not a manager)" do
+      tenant = tenant_fixture(:one)
+      staff_actor = member_fixture(tenant, role: :staff)
+      new_site = site_fixture(tenant)
+      target = member_fixture(tenant)
+
+      assert {:error, :forbidden} =
+               Members.update_assignment(staff_actor, target, %{site_id: new_site.id, team: :bar})
+
+      assert %Member{site_id: site_id} = Repo.get!(Member, target.id)
+      assert site_id == target.site_id
+    end
+
+    test "a manager cannot move a member of another tenant (cross-tenant)" do
+      tenant_a = tenant_fixture(:one)
+      tenant_b = tenant_fixture(:two)
+      manager_a = member_fixture(tenant_a, role: :manager)
+      new_site_b = site_fixture(tenant_b)
+      target_b = member_fixture(tenant_b)
+
+      assert {:error, :forbidden} =
+               Members.update_assignment(manager_a, target_b, %{
+                 site_id: new_site_b.id,
+                 team: :bar
+               })
+    end
+
+    test "a deactivated target is not moved: {:error, :already_inactive}" do
+      tenant = tenant_fixture(:one)
+      manager = member_fixture(tenant, role: :manager)
+      new_site = site_fixture(tenant)
+      target = member_fixture(tenant)
+
+      assert {:ok, deactivated} = Members.deactivate_member(manager, target)
+
+      assert {:error, :already_inactive} =
+               Members.update_assignment(manager, deactivated, %{
+                 site_id: new_site.id,
+                 team: :bar
+               })
+    end
+
+    test "a manager deactivated after their struct was loaded cannot move anyone (liveness re-read)" do
+      tenant = tenant_fixture(:one)
+      manager = member_fixture(tenant, role: :manager)
+      other_manager = member_fixture(tenant, role: :manager)
+      new_site = site_fixture(tenant)
+      target = member_fixture(tenant)
+
+      assert {:ok, _} = Members.deactivate_member(other_manager, manager)
+
+      assert {:error, :forbidden} =
+               Members.update_assignment(manager, target, %{site_id: new_site.id, team: :bar})
+
+      assert %Member{site_id: site_id} = Repo.get!(Member, target.id)
+      assert site_id == target.site_id
+    end
+  end
 end

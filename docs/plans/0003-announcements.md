@@ -278,7 +278,7 @@ page.
        `NightShift.Announcements` contract — `@moduledoc`, `@spec` and raising
        stubs for all seven functions, no logic. **Flagged:** invariant 5
        (actor-first shape). Verify: compiles warning-free; seven functions raise.
-4. [ ] *(spec-tester, fresh session, parallel from here)*
+4. [x] *(spec-tester, fresh session, parallel from here)*
        `test/support/fixtures/announcements_fixtures.ex` and context plus LiveView
        tests for criteria 1–7, from the criteria and the web contract alone, with
        the negative cases `.claude/rules/testing.md` requires: staff posting,
@@ -336,6 +336,18 @@ page.
   had the derivation already. The suffix now lives in `config/worktree_suffix.exs`,
   which both configs evaluate.
 - Steps 1–12 touch no file 0002 touches. Steps 13 and 14 do, and wait for it.
+- Step 4 ran *after* steps 5–12 rather than in parallel with them; the tests
+  were still written from the criteria and the web contract alone. The
+  spec-tester was given the `### Web contract` section, which step 4's own text
+  requires, and nothing else below the criteria. It disclosed one read-list
+  breach: it saw the bodies of eight `Members` functions and states no assertion
+  depends on them.
+- Step 4 left one open failure and one warning in files this session must not
+  edit: `announcements_live_test.exs:431` asserts `assert_error_sent 404` for
+  `GET /announcements/:id/edit`, but the app renders a 404 instead of raising,
+  and the same file has an unused `NightShift.AnnouncementsFixtures` import.
+  Criterion 7's substance holds — `router.ex:111` is the only announcements
+  route.
 - `Members.fetch_active/1`, planned before 0002's shape was known, is dropped.
   `Announcements` carries its own private `acting/1`, matching `Chat`. The
   three copies of the invariant-4 liveness read are a deliberate debt, to be

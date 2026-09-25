@@ -152,6 +152,10 @@ touching tenant schemas, so one schema per tenant suffices.
 
 ### Risks
 
+- The last-active-manager rule in criterion 4 is a read-then-write. Counting
+  active managers and then updating lets two concurrent deactivations both pass
+  the count and leave a tenant with no manager. Step 9 does the count and the
+  update in one transaction with the tenant's active manager rows locked.
 - `mix test` alias runs `ecto.create`/`ecto.migrate` only; tenant migrations
   are driven from `test_helper.exs`, not the alias, so a fresh checkout works.
 - Tenant creation in `test_helper.exs` runs against the real database with no
@@ -184,11 +188,11 @@ touching tenant schemas, so one schema per tenant suffices.
 4. [x] Tenant migrations: `priv/repo/tenant_migrations/` with `sites`. Verify:
    provision a scratch tenant, inspect the table, drop it.
    **FLAG: migration, invariant 9.**
-5. [ ] Contract step: `@moduledoc`, `@spec` and raising stubs for
+5. [x] Contract step: `@moduledoc`, `@spec` and raising stubs for
    `NightShift.Tenants` (`create_tenant/1`,
    `get_tenant_by_schema/1`, `list_tenants/0`) and `NightShift.Members`
    (`create_site/2`, `create_member/2`, `get_active_member/2`,
-   `list_memberships/1`, `list_members/2`, `deactivate_member/2` — acting
+   `list_active_members/1`, `list_members/2`, `deactivate_member/2` — acting
    member first, `tenant_id` never defaulted). Verify:
    compiles; specs present; every function raises.
 6. [ ] Test harness, no assertions: `test/test_helper.exs` per the harness
@@ -246,6 +250,14 @@ touching tenant schemas, so one schema per tenant suffices.
 - Step 4 added `priv/*/tenant_migrations` to `.formatter.exs`'s
   `subdirectories`. The root config covered only `priv/*/migrations`, so tenant
   migrations were outside `mix format --check-formatted` entirely.
+- Step 5 named the cross-tenant lookup `list_active_members/1`, not
+  `list_memberships/1` as planned: the table is `members` and the struct is
+  `Member`, so a third word for the same thing invites confusion. It also added
+  `list_sites/1`, which seeds need to resolve a `site_id`.
+- `Members.create_site/2` and `create_member/2` take a tenant, not an acting
+  member, because nothing in the product creates either — they exist for seeds.
+  This is a deliberate reading of invariant 5: the invariant governs functions
+  that decide permissions, and these have no actor to decide about.
 - The CSP is not verified in a browser. `connect-src 'self'` covers the
   LiveView websocket only under CSP Level 3, `style-src` carries
   `'unsafe-inline'` because `Phoenix.LiveView.JS.show/hide` writes inline

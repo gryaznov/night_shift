@@ -21,27 +21,21 @@ defmodule NightShiftWeb.GroupLive do
   def mount(%{"id" => group_id}, _session, socket) do
     member = socket.assigns.current_member
 
-    case Chat.get_group(member, group_id) do
-      {:ok, group} ->
-        {:ok, messages} = Chat.list_messages(member, group)
+    with {:ok, group} <- Chat.get_group(member, group_id),
+         {:ok, messages} <- Chat.list_messages(member, group) do
+      if connected?(socket) do
+        Chat.subscribe(member, group)
+        Chat.mark_read(member, group)
+      end
 
-        if connected?(socket) do
-          Chat.subscribe(member, group)
-          Chat.mark_read(member, group)
-        end
-
-        {:ok,
-         socket
-         |> assign(:group, group)
-         |> assign(:error, nil)
-         |> assign(:form, message_form())
-         |> stream(:messages, messages)}
-
-      {:error, :forbidden} ->
-        {:ok,
-         socket
-         |> put_flash(:error, "That group is not available.")
-         |> redirect(to: ~p"/chat")}
+      {:ok,
+       socket
+       |> assign(:group, group)
+       |> assign(:error, nil)
+       |> assign(:form, message_form())
+       |> stream(:messages, messages)}
+    else
+      {:error, :forbidden} -> {:ok, refuse(socket)}
     end
   end
 
@@ -76,9 +70,20 @@ defmodule NightShiftWeb.GroupLive do
   # same row rather than two.
   @impl true
   def handle_info({:message_posted, message}, socket) do
-    Chat.mark_read(socket.assigns.current_member, socket.assigns.group)
+    # The subscription outlives the membership that justified it: a member moved
+    # to another site or team after mounting is still on this topic. Criterion 5
+    # forbids reading a group you are not in, so a message arriving after the
+    # move is not shown — the same re-read that refuses a post refuses this.
+    case Chat.mark_read(socket.assigns.current_member, socket.assigns.group) do
+      :ok -> {:noreply, stream_insert(socket, :messages, message)}
+      {:error, :forbidden} -> {:noreply, refuse(socket)}
+    end
+  end
 
-    {:noreply, stream_insert(socket, :messages, message)}
+  defp refuse(socket) do
+    socket
+    |> put_flash(:error, "That group is not available.")
+    |> redirect(to: ~p"/chat")
   end
 
   defp message_form(params \\ %{"body" => ""}), do: to_form(params, as: :message)

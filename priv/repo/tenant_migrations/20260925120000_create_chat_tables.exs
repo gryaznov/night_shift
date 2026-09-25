@@ -76,7 +76,11 @@ defmodule NightShift.Repo.Migrations.CreateChatTables do
     """)
   end
 
+  # Rolling back runs this before `messages` and `group_reads` are dropped, and
+  # both reference `groups` with `on_delete: :restrict`, so their rows go first.
   defp delete_groups do
+    repo().query!(~s|DELETE FROM "#{prefix()}"."group_reads"|)
+    repo().query!(~s|DELETE FROM "#{prefix()}"."messages"|)
     repo().query!(~s|DELETE FROM "#{prefix()}"."groups"|)
   end
 end

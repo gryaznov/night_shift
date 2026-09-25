@@ -49,23 +49,31 @@ defmodule NightShift.Chat do
   calls cannot produce a second site group — the unique indexes decide, not the
   read that preceded them.
   """
-  @spec create_groups_for_site(Tenant.t(), Site.t()) :: {:ok, [Group.t()]}
+  @spec create_groups_for_site(Tenant.t(), Site.t()) ::
+          {:ok, [Group.t()]} | {:error, Ecto.Changeset.t()}
   def create_groups_for_site(%Tenant{} = tenant, %Site{} = site) do
     prefix = Tenancy.prefix(tenant)
 
-    for team <- [nil | Member.teams()] do
-      %Group{}
-      |> Group.create_changeset(site.id, team)
-      |> Repo.insert(prefix: prefix, on_conflict: :nothing)
+    inserted =
+      Enum.reduce_while([nil | Member.teams()], :ok, fn team, :ok ->
+        %Group{}
+        |> Group.create_changeset(site.id, team)
+        |> Repo.insert(prefix: prefix, on_conflict: :nothing)
+        |> case do
+          {:ok, _group} -> {:cont, :ok}
+          {:error, changeset} -> {:halt, {:error, changeset}}
+        end
+      end)
+
+    with :ok <- inserted do
+      groups =
+        Group
+        |> where(site_id: ^site.id)
+        |> Repo.all(prefix: prefix)
+        |> sort_site_group_first()
+
+      {:ok, groups}
     end
-
-    groups =
-      Group
-      |> where(site_id: ^site.id)
-      |> Repo.all(prefix: prefix)
-      |> sort_site_group_first()
-
-    {:ok, groups}
   end
 
   @doc """
@@ -123,7 +131,7 @@ defmodule NightShift.Chat do
         |> limit(@history_limit)
         |> Repo.all(prefix: Tenancy.prefix(tenant))
         |> Enum.reverse()
-        |> with_author_emails()
+        |> with_author_emails(tenant)
 
       {:ok, messages}
     else
@@ -148,7 +156,7 @@ defmodule NightShift.Chat do
       |> Repo.insert(prefix: Tenancy.prefix(tenant))
       |> case do
         {:ok, message} ->
-          [message] = with_author_emails([message])
+          [message] = with_author_emails([message], tenant)
           broadcast(tenant, group, {:message_posted, message})
           {:ok, message}
 
@@ -246,16 +254,18 @@ defmodule NightShift.Chat do
   # The author's email comes from `public.members` joined to `public.users`, in a
   # second query with no prefix. `Message` deliberately has no `belongs_to
   # :member`, so there is no association a preload could resolve under the wrong
-  # schema.
-  defp with_author_emails([]), do: []
+  # schema. The tenant is filtered on explicitly (invariant 2) rather than left
+  # to follow from the ids having come out of a tenant-prefixed table.
+  defp with_author_emails([], %Tenant{}), do: []
 
-  defp with_author_emails(messages) do
+  defp with_author_emails(messages, %Tenant{} = tenant) do
     ids = messages |> Enum.map(& &1.member_id) |> Enum.uniq()
 
     emails =
       Member
       |> join(:inner, [m], u in User, on: u.id == m.user_id)
       |> where([m], m.id in ^ids)
+      |> where([m], m.tenant_id == ^tenant.id)
       |> select([m, u], {m.id, u.email})
       |> Repo.all()
       |> Map.new()
@@ -299,11 +309,23 @@ defmodule NightShift.Chat do
     read_cursor(prefix, group_id, member_id) || seq
   end
 
+  # A cursor only ever moves forward. Two sessions of the same member can compute
+  # different newest values and write them in either order; without `GREATEST`
+  # the later writer could install the smaller one and resurrect read messages as
+  # unread.
   defp write_cursor(prefix, group_id, member_id, seq, opts \\ nil) do
     opts =
       opts ||
         [
-          on_conflict: [set: [last_read_seq: seq, updated_at: DateTime.utc_now(:second)]],
+          on_conflict:
+            from(r in GroupRead,
+              update: [
+                set: [
+                  last_read_seq: fragment("GREATEST(?, EXCLUDED.last_read_seq)", r.last_read_seq),
+                  updated_at: ^DateTime.utc_now(:second)
+                ]
+              ]
+            ),
           conflict_target: [:group_id, :member_id]
         ]
 

@@ -345,4 +345,33 @@ defmodule NightShiftWeb.GroupLiveTest do
       assert {:ok, []} = Chat.list_messages(witness, old_team_group)
     end
   end
+
+  describe "criterion 5: a moved member's open view stops reading the group they left" do
+    test "a message posted after the move does not reach the moved member's view", %{conn: conn} do
+      tenant = tenant_fixture(:one)
+      manager = member_fixture(tenant, role: :manager)
+      {old_site, old_groups} = site_with_groups_fixture(tenant)
+      {new_site, _new_groups} = site_with_groups_fixture(tenant)
+      old_team_group = team_group(old_groups, :kitchen)
+
+      user = user_fixture()
+      member = member_fixture(tenant, user_id: user.id, site_id: old_site.id, team: :kitchen)
+      witness = member_fixture(tenant, site_id: old_site.id, team: :kitchen)
+
+      {:ok, view, _html} =
+        conn
+        |> log_in_user(user)
+        |> live(~p"/chat/#{old_team_group.id}")
+
+      assert {:ok, _} =
+               Members.update_assignment(manager, member, %{site_id: new_site.id, team: :bar})
+
+      # The subscription outlives the membership: the broadcast still arrives at
+      # the moved member's view, which must not render it.
+      assert {:ok, _message} =
+               Chat.post_message(witness, old_team_group, %{body: "after the move"})
+
+      assert_redirect(view, ~p"/chat")
+    end
+  end
 end

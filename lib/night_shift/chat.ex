@@ -24,7 +24,11 @@ defmodule NightShift.Chat do
 
   import Ecto.Query
 
+  @history_limit 200
+
+  alias NightShift.Accounts.User
   alias NightShift.Chat.Group
+  alias NightShift.Chat.GroupRead
   alias NightShift.Chat.Message
   alias NightShift.Members.Member
   alias NightShift.Members.Site
@@ -81,6 +85,7 @@ defmodule NightShift.Chat do
         |> preload(:site)
         |> Repo.all(prefix: Tenancy.prefix(tenant))
         |> sort_site_group_first()
+        |> Enum.map(&%{&1 | unread_count: count_unread(Tenancy.prefix(tenant), &1.id, member.id)})
 
       {:ok, groups}
     else
@@ -108,8 +113,22 @@ defmodule NightShift.Chat do
   Older messages are retained and unreachable: 0002 ships no way to page back.
   """
   @spec list_messages(Member.t(), Group.t()) :: {:ok, [Message.t()]} | {:error, :forbidden}
-  def list_messages(%Member{} = _actor, %Group{} = _group) do
-    raise "not implemented"
+  def list_messages(%Member{} = actor, %Group{} = group) do
+    with {:ok, member, tenant} <- acting(actor),
+         {:ok, group} <- fetch_group(member, tenant, group.id) do
+      messages =
+        Message
+        |> where(group_id: ^group.id)
+        |> order_by(desc: :seq)
+        |> limit(@history_limit)
+        |> Repo.all(prefix: Tenancy.prefix(tenant))
+        |> Enum.reverse()
+        |> with_author_emails()
+
+      {:ok, messages}
+    else
+      _ -> {:error, :forbidden}
+    end
   end
 
   @doc """
@@ -121,16 +140,39 @@ defmodule NightShift.Chat do
   """
   @spec post_message(Member.t(), Group.t(), map()) ::
           {:ok, Message.t()} | {:error, :forbidden} | {:error, Ecto.Changeset.t()}
-  def post_message(%Member{} = _actor, %Group{} = _group, attrs) when is_map(attrs) do
-    raise "not implemented"
+  def post_message(%Member{} = actor, %Group{} = group, attrs) when is_map(attrs) do
+    with {:ok, member, tenant} <- acting(actor),
+         {:ok, group} <- fetch_group(member, tenant, group.id) do
+      %Message{}
+      |> Message.create_changeset(attrs, group.id, member.id)
+      |> Repo.insert(prefix: Tenancy.prefix(tenant))
+      |> case do
+        {:ok, message} ->
+          [message] = with_author_emails([message])
+          broadcast(tenant, group, {:message_posted, message})
+          {:ok, message}
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
+    else
+      _ -> {:error, :forbidden}
+    end
   end
 
   @doc """
   Marks `group` read for the acting member, up to its newest message.
   """
   @spec mark_read(Member.t(), Group.t()) :: :ok | {:error, :forbidden}
-  def mark_read(%Member{} = _actor, %Group{} = _group) do
-    raise "not implemented"
+  def mark_read(%Member{} = actor, %Group{} = group) do
+    with {:ok, member, tenant} <- acting(actor),
+         {:ok, group} <- fetch_group(member, tenant, group.id) do
+      prefix = Tenancy.prefix(tenant)
+      write_cursor(prefix, group.id, member.id, newest_seq(prefix, group.id))
+      :ok
+    else
+      _ -> {:error, :forbidden}
+    end
   end
 
   @doc """
@@ -140,8 +182,13 @@ defmodule NightShift.Chat do
   """
   @spec unread_count(Member.t(), Group.t()) ::
           {:ok, non_neg_integer()} | {:error, :forbidden}
-  def unread_count(%Member{} = _actor, %Group{} = _group) do
-    raise "not implemented"
+  def unread_count(%Member{} = actor, %Group{} = group) do
+    with {:ok, member, tenant} <- acting(actor),
+         {:ok, group} <- fetch_group(member, tenant, group.id) do
+      {:ok, count_unread(Tenancy.prefix(tenant), group.id, member.id)}
+    else
+      _ -> {:error, :forbidden}
+    end
   end
 
   @doc """
@@ -151,8 +198,13 @@ defmodule NightShift.Chat do
   subscribe to a group it may not read.
   """
   @spec subscribe(Member.t(), Group.t()) :: :ok | {:error, :forbidden}
-  def subscribe(%Member{} = _actor, %Group{} = _group) do
-    raise "not implemented"
+  def subscribe(%Member{} = actor, %Group{} = group) do
+    with {:ok, member, tenant} <- acting(actor),
+         {:ok, group} <- fetch_group(member, tenant, group.id) do
+      Phoenix.PubSub.subscribe(NightShift.PubSub, Tenancy.group_topic(tenant, group))
+    else
+      _ -> {:error, :forbidden}
+    end
   end
 
   # The acting member is re-read before every decision, and the tenant comes from
@@ -183,6 +235,89 @@ defmodule NightShift.Chat do
   # managed: a member is in their site's group and in their own team's group.
   defp member_of?(%Member{} = member, %Group{} = group) do
     group.site_id == member.site_id and (is_nil(group.team) or group.team == member.team)
+  end
+
+  # Broadcast only after the insert has committed, and only on this tenant's topic
+  # for this group (invariant 6).
+  defp broadcast(%Tenant{} = tenant, %Group{} = group, message) do
+    Phoenix.PubSub.broadcast(NightShift.PubSub, Tenancy.group_topic(tenant, group), message)
+  end
+
+  # The author's email comes from `public.members` joined to `public.users`, in a
+  # second query with no prefix. `Message` deliberately has no `belongs_to
+  # :member`, so there is no association a preload could resolve under the wrong
+  # schema.
+  defp with_author_emails([]), do: []
+
+  defp with_author_emails(messages) do
+    ids = messages |> Enum.map(& &1.member_id) |> Enum.uniq()
+
+    emails =
+      Member
+      |> join(:inner, [m], u in User, on: u.id == m.user_id)
+      |> where([m], m.id in ^ids)
+      |> select([m, u], {m.id, u.email})
+      |> Repo.all()
+      |> Map.new()
+
+    Enum.map(messages, &%{&1 | author_email: Map.get(emails, &1.member_id)})
+  end
+
+  # How many messages this member has not seen. Their own never count (ruling 5),
+  # and a member who has never seen the group is seeded first, so inherited
+  # history counts as read (ruling 3) rather than as thousands of unread.
+  defp count_unread(prefix, group_id, member_id) do
+    cursor = cursor(prefix, group_id, member_id)
+
+    Message
+    |> where([m], m.group_id == ^group_id)
+    |> where([m], m.seq > ^cursor)
+    |> where([m], m.member_id != ^member_id)
+    |> Repo.aggregate(:count, prefix: prefix)
+  end
+
+  defp cursor(prefix, group_id, member_id) do
+    case read_cursor(prefix, group_id, member_id) do
+      nil -> seed_cursor(prefix, group_id, member_id)
+      seq -> seq
+    end
+  end
+
+  defp read_cursor(prefix, group_id, member_id) do
+    GroupRead
+    |> where(group_id: ^group_id, member_id: ^member_id)
+    |> select([r], r.last_read_seq)
+    |> Repo.one(prefix: prefix)
+  end
+
+  # First sight of a group: the cursor starts at the newest message, not at zero.
+  # `on_conflict: :nothing` makes two simultaneous first sights safe — both
+  # compute the same value, and the loser reads back the winner's row.
+  defp seed_cursor(prefix, group_id, member_id) do
+    seq = newest_seq(prefix, group_id)
+    write_cursor(prefix, group_id, member_id, seq, on_conflict: :nothing)
+    read_cursor(prefix, group_id, member_id) || seq
+  end
+
+  defp write_cursor(prefix, group_id, member_id, seq, opts \\ nil) do
+    opts =
+      opts ||
+        [
+          on_conflict: [set: [last_read_seq: seq, updated_at: DateTime.utc_now(:second)]],
+          conflict_target: [:group_id, :member_id]
+        ]
+
+    %GroupRead{}
+    |> GroupRead.changeset(%{group_id: group_id, member_id: member_id, last_read_seq: seq})
+    |> Repo.insert(
+      Keyword.merge([prefix: prefix, conflict_target: [:group_id, :member_id]], opts)
+    )
+  end
+
+  defp newest_seq(prefix, group_id) do
+    Message
+    |> where(group_id: ^group_id)
+    |> Repo.aggregate(:max, :seq, prefix: prefix) || 0
   end
 
   defp sort_site_group_first(groups) do

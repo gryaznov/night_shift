@@ -45,8 +45,11 @@ defmodule NightShift.Chat.Message do
   neither can arrive from a param or a client event.
 
   The body is trimmed before it is measured, so a whitespace-only message is
-  empty, and it is measured in graphemes, so an emoji counts once. The database
-  check constraint uses `char_length`, which counts the same units.
+  empty, and it is measured in graphemes, so an emoji counts once.
+
+  The upper bound lives here and nowhere else. Postgres counts codepoints, not
+  graphemes, so no check constraint can state it — the database only enforces
+  that a trimmed body is not empty (`body_not_empty`).
   """
   @spec create_changeset(t(), map(), Ecto.UUID.t(), Ecto.UUID.t()) :: Ecto.Changeset.t()
   def create_changeset(message, attrs, group_id, member_id) do
@@ -63,7 +66,7 @@ defmodule NightShift.Chat.Message do
       count: :graphemes,
       message: "is too long — keep it under #{@max_length} characters"
     )
-    |> check_constraint(:body, name: :body_length)
+    |> check_constraint(:body, name: :body_not_empty)
   end
 
   @doc "The longest message the product accepts."

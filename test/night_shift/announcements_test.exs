@@ -46,6 +46,20 @@ defmodule NightShift.AnnouncementsTest do
       assert %{body: _} = errors_on(changeset)
     end
 
+    test "rejects a body longer than the ceiling the schema and the check constraint share" do
+      tenant = tenant_fixture(:one)
+      manager = member_fixture(tenant, role: :manager)
+      max = NightShift.Announcements.Announcement.max_body()
+
+      assert {:error, changeset} =
+               Announcements.post_announcement(manager, %{body: String.duplicate("a", max + 1)})
+
+      assert %{body: _} = errors_on(changeset)
+
+      assert {:ok, _announcement} =
+               Announcements.post_announcement(manager, %{body: String.duplicate("a", max)})
+    end
+
     # Negative case required by testing.md: staff posting.
     test "a staff member cannot post an announcement (negative, criterion 1)" do
       tenant = tenant_fixture(:one)

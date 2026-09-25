@@ -34,8 +34,10 @@ defmodule NightShiftWeb.TenantAuth do
   It subscribes to the announcements topic for the same reason the member topic
   is handled here rather than in each LiveView: the unread counter is on every
   tenant page (criterion 6 of 0003), so a page added later cannot forget to keep
-  it current. The hook recomputes the count and then lets the message through,
-  so the announcements page still receives it.
+  it current. It does so through `NightShift.Announcements.subscribe/1`, which
+  authorizes and builds the topic from the re-read member, so no topic is
+  constructed here. The hook recomputes the count and then lets the message
+  through, so the announcements page still receives it.
 
   0001 ships no tenant chooser and seeds give each user one membership; a user
   holding several acts in the first, which `## Out of scope` leaves undefined.
@@ -51,11 +53,7 @@ defmodule NightShiftWeb.TenantAuth do
 
         if Phoenix.LiveView.connected?(socket) do
           Phoenix.PubSub.subscribe(NightShift.PubSub, Tenancy.topic(member.tenant, :members))
-
-          Phoenix.PubSub.subscribe(
-            NightShift.PubSub,
-            Tenancy.topic(member.tenant, :announcements)
-          )
+          Announcements.subscribe(member)
         end
 
         {:cont,

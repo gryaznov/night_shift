@@ -5,7 +5,7 @@ defmodule NightShift.Repo.Migrations.AddNameToUsers do
   # have not read an announcement, and a user had only an email address.
   def up do
     alter table(:users) do
-      add :name, :string
+      add :name, :string, size: 160
     end
 
     # Existing rows predate the column, so the local part of the address is the
@@ -13,7 +13,7 @@ defmodule NightShift.Repo.Migrations.AddNameToUsers do
     execute("UPDATE users SET name = split_part(email, '@', 1) WHERE name IS NULL")
 
     alter table(:users) do
-      modify :name, :string, null: false
+      modify :name, :string, size: 160, null: false
     end
   end
 

@@ -107,7 +107,7 @@ defmodule NightShift.Announcements do
         |> with_read_at(member)
         |> order_by([a], desc: a.seq)
         |> Repo.all(prefix: Tenancy.prefix(tenant))
-        |> with_author_names()
+        |> with_author_names(tenant)
 
       {:ok, announcements}
     end
@@ -135,7 +135,7 @@ defmodule NightShift.Announcements do
            |> where([a], a.id == ^id)
            |> with_read_at(member)
            |> Repo.one(prefix: Tenancy.prefix(tenant)) do
-      [announcement] = with_author_names([announcement])
+      [announcement] = with_author_names([announcement], tenant)
       {:ok, announcement}
     else
       _ -> {:error, :forbidden}
@@ -209,7 +209,7 @@ defmodule NightShift.Announcements do
         Announcement
         |> order_by([a], desc: a.seq)
         |> Repo.all(prefix: prefix)
-        |> with_author_names()
+        |> with_author_names(tenant)
 
       readers = readers_by_announcement(prefix, Enum.map(announcements, & &1.id))
       members = active_members(tenant)
@@ -345,10 +345,11 @@ defmodule NightShift.Announcements do
   # One unprefixed query for every author on the page. An `Ecto` association
   # could not do this: `author_member_id` names a row in `public.members`, and a
   # preload would inherit the tenant prefix and look for `members` in the tenant
-  # schema.
-  defp with_author_names([]), do: []
+  # schema. `members` is in `public`, so isolation is the explicitly passed
+  # `tenant_id` and nothing else (invariant 2).
+  defp with_author_names([], %Tenant{}), do: []
 
-  defp with_author_names(announcements) do
+  defp with_author_names(announcements, %Tenant{} = tenant) do
     ids = announcements |> Enum.map(& &1.author_member_id) |> Enum.uniq()
 
     names =
@@ -356,6 +357,7 @@ defmodule NightShift.Announcements do
         join: u in User,
         on: u.id == m.user_id,
         where: m.id in ^ids,
+        where: m.tenant_id == ^tenant.id,
         select: {m.id, u.name}
       )
       |> Repo.all()

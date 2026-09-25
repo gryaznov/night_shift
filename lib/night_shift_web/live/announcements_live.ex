@@ -90,7 +90,11 @@ defmodule NightShiftWeb.AnnouncementsLive do
   end
 
   def handle_info({:announcement_read, _id}, socket) do
-    {:noreply, assign_read_state(socket)}
+    # Every member of the tenant receives this. Only a manager renders the read
+    # state, and for anyone else `list_with_read_state/1` would spend two round
+    # trips to be refused, on every read by every member.
+    socket = if socket.assigns.manager?, do: assign_read_state(socket), else: socket
+    {:noreply, socket}
   end
 
   @impl true

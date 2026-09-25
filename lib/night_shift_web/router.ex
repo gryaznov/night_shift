@@ -106,8 +106,10 @@ defmodule NightShiftWeb.Router do
       ] do
       live "/workspace", WorkspaceLive, :show
 
-      # Reserved by 0001, built by 0002 and 0003.
       live "/chat", ChatLive, :index
+      live "/chat/:id", GroupLive, :show
+
+      # Reserved by 0001, built by 0003.
       live "/announcements", AnnouncementsLive, :index
     end
   end

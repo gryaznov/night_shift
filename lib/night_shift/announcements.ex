@@ -35,6 +35,9 @@ defmodule NightShift.Announcements do
   alias NightShift.Announcements.Acknowledgement
   alias NightShift.Announcements.Announcement
   alias NightShift.Members.Member
+  alias NightShift.Repo
+  alias NightShift.Tenancy
+  alias NightShift.Tenants.Tenant
 
   @typedoc """
   One announcement as a manager sees it: the audience as it currently stands,
@@ -55,16 +58,22 @@ defmodule NightShift.Announcements do
   a site of `actor`'s tenant. The body is trimmed, then must be 1 to
   #{Announcement.max_body()} graphemes.
 
-  Broadcasts `{:announcement_posted, id}` on the tenant's announcements topic
-  once the insert has committed.
-
   Returns `{:error, :forbidden}` when `actor` is not an active manager, and a
-  changeset for a body or a site the announcement cannot carry.
+  changeset for a body or a site the announcement cannot carry. A `:site_id`
+  belonging to another tenant is a changeset error, not a crash: the insert runs
+  under this tenant's prefix, and `sites` there does not contain it.
   """
   @spec post_announcement(Member.t(), map()) ::
           {:ok, Announcement.t()} | {:error, :forbidden} | {:error, Ecto.Changeset.t()}
-  def post_announcement(%Member{} = _actor, attrs) when is_map(attrs) do
-    raise "not implemented"
+  def post_announcement(%Member{} = actor, attrs) when is_map(attrs) do
+    with {:ok, member, tenant} <- acting(actor),
+         :manager <- member.role do
+      %Announcement{}
+      |> Announcement.create_changeset(attrs, member.id)
+      |> Repo.insert(prefix: Tenancy.prefix(tenant))
+    else
+      _ -> {:error, :forbidden}
+    end
   end
 
   @doc """
@@ -155,5 +164,18 @@ defmodule NightShift.Announcements do
   @spec subscribe(Member.t()) :: :ok | {:error, :forbidden}
   def subscribe(%Member{} = _actor) do
     raise "not implemented"
+  end
+
+  # Invariant 3 fixes identity at the session boundary; it does not fix
+  # liveness. Invariant 4 stops a member deactivated since the session opened
+  # from reading or posting, which a stale `active` on a socket assign cannot
+  # honour, so every entry point re-reads the member by its own id. The tenant
+  # comes from that re-read record, never from an argument, so no caller can
+  # pair a member with someone else's tenant.
+  defp acting(%Member{id: id}) do
+    case Repo.get(Member, id) do
+      %Member{active: true} = member -> {:ok, member, Repo.get!(Tenant, member.tenant_id)}
+      _ -> {:error, :forbidden}
+    end
   end
 end

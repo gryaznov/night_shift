@@ -261,61 +261,68 @@ page.
 
 ## Steps
 
-1. Public migration adding `users.name` (not null, backfilled from the email
-   local part), `name` cast and validated in `Accounts.registration_changeset/3`,
-   and `user_fixture` defaulting it so no existing test has to change.
-   `priv/repo/seeds.exs` is deliberately left for step 14. **Flagged:** public
-   migration. Verify: `mix ecto.migrate` on a populated database, then
-   `mix test`.
-2. Tenant migration creating `announcements` and
-   `announcement_acknowledgements` as specified, timestamped after 0002's
-   `20260925120000`. **Flagged:** migration, invariants 1, 8, 9. Verify:
-   `mix ecto.reset`, then `psql` showing both tables, the unique `seq` index,
-   the composite primary key, the body check constraint and the two
-   `public.members` foreign keys; rolled-back inserts proving each constraint
-   refuses; one down/up cycle on a seeded tenant.
-3. `Announcement` and `Acknowledgement` schemas and changesets, and the
-   `NightShift.Announcements` contract — `@moduledoc`, `@spec` and raising
-   stubs for all seven functions, no logic. **Flagged:** invariant 5
-   (actor-first shape). Verify: compiles warning-free; seven functions raise.
-4. *(spec-tester, fresh session, parallel from here)*
-   `test/support/fixtures/announcements_fixtures.ex` and context plus LiveView
-   tests for criteria 1–7, from the criteria and the web contract alone, with
-   the negative cases `.claude/rules/testing.md` requires: staff posting,
-   another tenant's member, a deactivated member reading and posting, another
-   tenant's announcement id, another tenant's `site_id` as a target.
-5. Implement `post_announcement/2`: manager only, body trimmed then 1–2000
-   graphemes, `site_id` `nil` or a site of this tenant. **Flagged:** permission
-   boundary (criterion 1), invariant 4.
-6. Implement `list_for_member/1`, `get_for_member/2` and `unread_count/1`,
-   author excluded from the audience (criteria 2, 6). **Flagged:** permission
-   boundary — targeting decides what a member may read.
-7. Implement `record_views/2`, idempotent through the composite primary key,
-   preserving the first `inserted_at` (criterion 3).
-8. Implement `list_with_read_state/1` for any manager of the tenant: current
-   audience, read count, unread members with names (criterion 4). **Flagged:**
-   permission boundary.
-9. Both broadcasts and `subscribe/1`, after their transactions commit
-   (criteria 4, 5). **Flagged:** invariant 6.
-10. `AnnouncementsLive`: the list newest first, views recorded on render, the
-    manager compose form with a site picker, and the manager read-state panel
-    updating on `{:announcement_read, _}`. Context calls only, no `Repo`, no
-    permission decisions.
-11. `TenantAuth`: subscribe to the announcements topic, assign the unread
-    counter, recompute on both broadcasts. The announcement hook returns
-    `{:cont, socket}`. **Flagged:** permission boundary — it runs for every
-    tenant page.
-12. Layout badge on `nav-announcements`, absent at zero.
-13. *(after 0002 wraps)* Seed a tenant-wide and a per-site announcement, and
-    real names on seeded users, in `priv/repo/seeds.exs` — the file 0002's step
-    11 also edits.
-14. *(after 0002 wraps)* `/verify` with output shown; `docs/DECISIONS.md`
-    entries for the derived audience, for implicit reads, for `users.name`, and
-    for the two read models differing from 0002's; `docs/CHANGELOG.md`.
-    Renumber against whatever 0002 took.
+1. [ ] Public migration adding `users.name` (not null, backfilled from the email
+       local part), `name` cast and validated in `Accounts.registration_changeset/3`,
+       and `user_fixture` defaulting it so no existing test has to change.
+       `priv/repo/seeds.exs` is deliberately left for step 14. **Flagged:** public
+       migration. Verify: `mix ecto.migrate` on a populated database, then
+       `mix test`.
+2. [x] Tenant migration creating `announcements` and
+       `announcement_acknowledgements` as specified, timestamped after 0002's
+       `20260925120000`. **Flagged:** migration, invariants 1, 8, 9. Verify:
+       `mix ecto.reset`, then `psql` showing both tables, the unique `seq` index,
+       the composite primary key, the body check constraint and the two
+       `public.members` foreign keys; rolled-back inserts proving each constraint
+       refuses; one down/up cycle on a seeded tenant.
+3. [x] `Announcement` and `Acknowledgement` schemas and changesets, and the
+       `NightShift.Announcements` contract — `@moduledoc`, `@spec` and raising
+       stubs for all seven functions, no logic. **Flagged:** invariant 5
+       (actor-first shape). Verify: compiles warning-free; seven functions raise.
+4. [ ] *(spec-tester, fresh session, parallel from here)*
+       `test/support/fixtures/announcements_fixtures.ex` and context plus LiveView
+       tests for criteria 1–7, from the criteria and the web contract alone, with
+       the negative cases `.claude/rules/testing.md` requires: staff posting,
+       another tenant's member, a deactivated member reading and posting, another
+       tenant's announcement id, another tenant's `site_id` as a target.
+5. [x] Implement `post_announcement/2`: manager only, body trimmed then 1–2000
+       graphemes, `site_id` `nil` or a site of this tenant. **Flagged:** permission
+       boundary (criterion 1), invariant 4.
+6. [ ] Implement `list_for_member/1`, `get_for_member/2` and `unread_count/1`,
+       author excluded from the audience (criteria 2, 6). **Flagged:** permission
+       boundary — targeting decides what a member may read.
+7. [ ] Implement `record_views/2`, idempotent through the composite primary key,
+       preserving the first `inserted_at` (criterion 3).
+8. [ ] Implement `list_with_read_state/1` for any manager of the tenant: current
+       audience, read count, unread members with names (criterion 4). **Flagged:**
+       permission boundary.
+9. [ ] Both broadcasts and `subscribe/1`, after their transactions commit
+       (criteria 4, 5). **Flagged:** invariant 6.
+10. [ ] `AnnouncementsLive`: the list newest first, views recorded on render, the
+        manager compose form with a site picker, and the manager read-state panel
+        updating on `{:announcement_read, _}`. Context calls only, no `Repo`, no
+        permission decisions.
+11. [ ] `TenantAuth`: subscribe to the announcements topic, assign the unread
+        counter, recompute on both broadcasts. The announcement hook returns
+        `{:cont, socket}`. **Flagged:** permission boundary — it runs for every
+        tenant page.
+12. [ ] Layout badge on `nav-announcements`, absent at zero.
+13. [ ] *(after 0002 wraps)* Seed a tenant-wide and a per-site announcement, and
+        real names on seeded users, in `priv/repo/seeds.exs` — the file 0002's step
+        11 also edits.
+14. [ ] *(after 0002 wraps)* `/verify` with output shown; `docs/DECISIONS.md`
+        entries for the derived audience, for implicit reads, for `users.name`, and
+        for the two read models differing from 0002's; `docs/CHANGELOG.md`.
+        Renumber against whatever 0002 took.
 
 ## Notes / deviations
 
+- Step 2 and step 3 are committed at 77e525c. Step 5 is done and verified but
+  not yet committed, so its box is ticked ahead of its commit — the one place
+  this file departs from `docs/plans/README.md`.
+- `config/dev.exs` gained the per-worktree database suffix at 7ae5f26, outside
+  this plan. Every worktree shared `night_shift_dev` until then; `config/test.exs`
+  had the derivation already. The suffix now lives in `config/worktree_suffix.exs`,
+  which both configs evaluate.
 - Steps 1–12 touch no file 0002 touches. Steps 13 and 14 do, and wait for it.
 - `Members.fetch_active/1`, planned before 0002's shape was known, is dropped.
   `Announcements` carries its own private `acting/1`, matching `Chat`. The

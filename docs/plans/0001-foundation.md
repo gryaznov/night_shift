@@ -195,7 +195,7 @@ touching tenant schemas, so one schema per tenant suffices.
    `list_active_members/1`, `list_members/2`, `deactivate_member/2` — acting
    member first, `tenant_id` never defaulted). Verify:
    compiles; specs present; every function raises.
-6. [ ] Test harness, no assertions: `test/test_helper.exs` per the harness
+6. [x] Test harness, no assertions: `test/test_helper.exs` per the harness
    section — find-or-create two tenants, `Triplex.migrate/2` each, assert both
    are in `Triplex.all/1`, all before `ExUnit.start()` and
    `Sandbox.mode(:manual)`; `test/support/fixtures/` gains `tenant_fixture/1`,
@@ -207,7 +207,7 @@ touching tenant schemas, so one schema per tenant suffices.
    1–5 from the criteria alone, including the negative cases required by
    `.claude/rules/testing.md` — other tenant, other member, deactivated
    member, staff attempting deactivation. No implementation in this step.
-8. [ ] Implement `NightShift.Tenants` provisioning: create the row, create the
+8. [x] Implement `NightShift.Tenants` provisioning: create the row, create the
    Triplex schema, run tenant migrations. Verify: spec-tester's tenant tests.
 9. [ ] Implement `NightShift.Members`: sites in the tenant schema, members in
    `public`, `site_id` validated against the acting tenant's sites, criterion 3
@@ -258,6 +258,16 @@ touching tenant schemas, so one schema per tenant suffices.
   member, because nothing in the product creates either — they exist for seeds.
   This is a deliberate reading of invariant 5: the invariant governs functions
   that decide permissions, and these have no actor to decide about.
+- Steps 6 and 8 were swapped. The harness has to create tenants, so it needs
+  `Tenants.create_tenant/1`; writing provisioning a second time inside
+  `test_helper.exs` would have meant every test run exercised a copy of the real
+  path instead of the path itself. `Tenancy.prefix/1` and `topic/2` were
+  implemented with it — two expressions, and the harness needs the prefix.
+- The harness lives in a compiled module, `NightShift.TenantSetup`, not inline in
+  `test_helper.exs`. Triplex 1.3.0 (the latest release) calls
+  `repo.__adapter__` without parentheses, which Elixir 1.17 deprecates; from a
+  `.exs` script that warning and its stacktrace print on every `mix test`, while
+  from a compiled module it prints once at compile time.
 - The CSP is not verified in a browser. `connect-src 'self'` covers the
   LiveView websocket only under CSP Level 3, `style-src` carries
   `'unsafe-inline'` because `Phoenix.LiveView.JS.show/hide` writes inline

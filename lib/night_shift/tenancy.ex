@@ -21,7 +21,7 @@ defmodule NightShift.Tenancy do
   The Postgres schema name to use as a query prefix for `tenant`.
   """
   @spec prefix(Tenant.t()) :: String.t()
-  def prefix(%Tenant{}), do: raise("not implemented")
+  def prefix(%Tenant{schema: schema}), do: schema
 
   @doc """
   The PubSub topic for `key` within `tenant`.
@@ -30,5 +30,5 @@ defmodule NightShift.Tenancy do
   receive another tenant's broadcasts.
   """
   @spec topic(Tenant.t(), topic_key()) :: String.t()
-  def topic(%Tenant{}, key) when is_atom(key), do: raise("not implemented")
+  def topic(%Tenant{schema: schema}, key) when is_atom(key), do: "tenant:#{schema}:#{key}"
 end

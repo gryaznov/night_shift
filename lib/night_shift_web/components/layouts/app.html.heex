@@ -18,9 +18,16 @@
     <.link
       navigate={~p"/announcements"}
       data-test-id="nav-announcements"
-      class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+      class="flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
     >
-      Announcements
+      Announcements <%!-- Absent, not zero: nothing unread should show nothing. --%>
+      <span
+        :if={(assigns[:unread_announcements] || 0) > 0}
+        data-test-id="nav-announcements-unread"
+        class="inline-flex min-w-5 items-center justify-center rounded-full bg-zinc-900 px-1.5 py-0.5 text-xs font-semibold text-white"
+      >
+        {@unread_announcements}
+      </span>
     </.link>
   </nav>
 </header>

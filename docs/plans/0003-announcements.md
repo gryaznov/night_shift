@@ -295,17 +295,17 @@ page.
 8. [x] Implement `list_with_read_state/1` for any manager of the tenant: current
        audience, read count, unread members with names (criterion 4). **Flagged:**
        permission boundary.
-9. [ ] Both broadcasts and `subscribe/1`, after their transactions commit
+9. [x] Both broadcasts and `subscribe/1`, after their transactions commit
        (criteria 4, 5). **Flagged:** invariant 6.
-10. [ ] `AnnouncementsLive`: the list newest first, views recorded on render, the
+10. [x] `AnnouncementsLive`: the list newest first, views recorded on render, the
         manager compose form with a site picker, and the manager read-state panel
         updating on `{:announcement_read, _}`. Context calls only, no `Repo`, no
         permission decisions.
-11. [ ] `TenantAuth`: subscribe to the announcements topic, assign the unread
+11. [x] `TenantAuth`: subscribe to the announcements topic, assign the unread
         counter, recompute on both broadcasts. The announcement hook returns
         `{:cont, socket}`. **Flagged:** permission boundary — it runs for every
         tenant page.
-12. [ ] Layout badge on `nav-announcements`, absent at zero.
+12. [x] Layout badge on `nav-announcements`, absent at zero.
 13. [ ] *(after 0002 wraps)* Seed a tenant-wide and a per-site announcement, and
         real names on seeded users, in `priv/repo/seeds.exs` — the file 0002's step
         11 also edits.
@@ -316,8 +316,18 @@ page.
 
 ## Notes / deviations
 
-- Steps 2 and 3 are committed at 77e525c, step 5 at 34d2e2e. Steps 6, 7 and 8
-  are done and verified but not yet committed.
+- Steps 2 and 3 are committed at 77e525c, step 5 at 34d2e2e. Steps 6 to 12 are
+  done and verified but not yet committed.
+- A manager's own announcement never reaches their stream, because an author is
+  not in their own audience. `AnnouncementsLive` therefore refreshes the read
+  state in `handle_event/3` on a successful post rather than waiting for the
+  broadcast to return, or the manager's own announcement is missing from the
+  page for as long as that round trip takes.
+- `AnnouncementsLive` calls `Members.list_sites/1` for the site picker. That
+  function takes a tenant rather than an acting member, against the shape
+  `.claude/rules/web.md` describes; it decides nothing, and the tenant comes
+  from the `on_mount` assign. Whether the compose form renders follows `role`,
+  which is presentation — `post_announcement/2` is what refuses a staff post.
 - `author_name` and the ordering of `unread` come from `users.email`, because
   step 1 has not run. Step 1 changes both to `users.name`; nothing else about
   them changes.

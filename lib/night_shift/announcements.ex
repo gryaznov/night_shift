@@ -61,6 +61,10 @@ defmodule NightShift.Announcements do
   a site of `actor`'s tenant. The body is trimmed, then must be 1 to
   #{Announcement.max_body()} graphemes.
 
+  Broadcasts `{:announcement_posted, id}` on the tenant's announcements topic
+  once the insert has committed, never before: a subscriber that re-read a
+  rolled-back announcement would find nothing.
+
   Returns `{:error, :forbidden}` when `actor` is not an active manager, and a
   changeset for a body or a site the announcement cannot carry. A `:site_id`
   belonging to another tenant is a changeset error, not a crash: the insert runs
@@ -71,9 +75,16 @@ defmodule NightShift.Announcements do
   def post_announcement(%Member{} = actor, attrs) when is_map(attrs) do
     with {:ok, member, tenant} <- acting(actor),
          :manager <- member.role do
-      %Announcement{}
-      |> Announcement.create_changeset(attrs, member.id)
-      |> Repo.insert(prefix: Tenancy.prefix(tenant))
+      case Repo.insert(Announcement.create_changeset(%Announcement{}, attrs, member.id),
+             prefix: Tenancy.prefix(tenant)
+           ) do
+        {:ok, announcement} ->
+          broadcast(tenant, {:announcement_posted, announcement.id})
+          {:ok, announcement}
+
+        {:error, changeset} ->
+          {:error, changeset}
+      end
     else
       _ -> {:error, :forbidden}
     end
@@ -151,7 +162,9 @@ defmodule NightShift.Announcements do
   def record_views(%Member{} = actor, announcements) when is_list(announcements) do
     with {:ok, member, tenant} <- acting(actor) do
       ids = for %Announcement{id: id} <- announcements, is_binary(id), do: id
-      {:ok, acknowledge(Tenancy.prefix(tenant), member, ids)}
+      rows = acknowledge(Tenancy.prefix(tenant), member, ids)
+      Enum.each(rows, &broadcast(tenant, {:announcement_read, &1.announcement_id}))
+      {:ok, rows}
     end
   end
 
@@ -215,8 +228,17 @@ defmodule NightShift.Announcements do
   and takes no topic or tenant of its own — both come from the re-read member.
   """
   @spec subscribe(Member.t()) :: :ok | {:error, :forbidden}
-  def subscribe(%Member{} = _actor) do
-    raise "not implemented"
+  def subscribe(%Member{} = actor) do
+    with {:ok, _member, tenant} <- acting(actor) do
+      Phoenix.PubSub.subscribe(NightShift.PubSub, Tenancy.topic(tenant, :announcements))
+    end
+  end
+
+  # Every broadcast carries the tenant in its topic (invariant 6), and the
+  # tenant comes from the re-read member, so nothing here can reach another
+  # tenant's subscribers.
+  defp broadcast(%Tenant{} = tenant, message) do
+    Phoenix.PubSub.broadcast(NightShift.PubSub, Tenancy.topic(tenant, :announcements), message)
   end
 
   # Targeting, and the whole of it: an announcement with no site addresses the

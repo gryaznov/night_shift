@@ -16,11 +16,13 @@ defmodule NightShiftWeb.TenantAuth do
 
   import Phoenix.Component, only: [assign: 3]
 
+  alias NightShift.Announcements
   alias NightShift.Members
   alias NightShift.Tenancy
 
   @doc """
-  `on_mount` hook assigning `:tenant` and `:current_member`.
+  `on_mount` hook assigning `:tenant`, `:current_member` and
+  `:unread_announcements`.
 
   Halts to the no-access page when the user has no active member record, which
   covers both a user who never had one and a member deactivated since.
@@ -28,6 +30,12 @@ defmodule NightShiftWeb.TenantAuth do
   A connected view also subscribes to its tenant's member topic, so a member
   deactivated while their page is open is sent to the no-access page there and
   then, rather than at their next request.
+
+  It subscribes to the announcements topic for the same reason the member topic
+  is handled here rather than in each LiveView: the unread counter is on every
+  tenant page (criterion 6 of 0003), so a page added later cannot forget to keep
+  it current. The hook recomputes the count and then lets the message through,
+  so the announcements page still receives it.
 
   0001 ships no tenant chooser and seeds give each user one membership; a user
   holding several acts in the first, which `## Out of scope` leaves undefined.
@@ -39,17 +47,23 @@ defmodule NightShiftWeb.TenantAuth do
           socket
           |> assign(:current_member, member)
           |> assign(:tenant, member.tenant)
+          |> assign_unread_announcements()
 
         if Phoenix.LiveView.connected?(socket) do
           Phoenix.PubSub.subscribe(NightShift.PubSub, Tenancy.topic(member.tenant, :members))
+
+          Phoenix.PubSub.subscribe(
+            NightShift.PubSub,
+            Tenancy.topic(member.tenant, :announcements)
+          )
         end
 
         {:cont,
          Phoenix.LiveView.attach_hook(
            socket,
-           :member_deactivated,
+           :tenant_events,
            :handle_info,
-           &handle_member_event/2
+           &handle_tenant_event/2
          )}
 
       [] ->
@@ -83,7 +97,7 @@ defmodule NightShiftWeb.TenantAuth do
   end
 
   # Enforced here rather than in each LiveView, so no tenant view can forget it.
-  defp handle_member_event({:member_deactivated, member_id}, socket) do
+  defp handle_tenant_event({:member_deactivated, member_id}, socket) do
     if member_id == socket.assigns.current_member.id do
       {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/no-access")}
     else
@@ -91,5 +105,21 @@ defmodule NightShiftWeb.TenantAuth do
     end
   end
 
-  defp handle_member_event(_message, socket), do: {:cont, socket}
+  # `:cont`, not `:halt`: the announcements page needs this message too.
+  defp handle_tenant_event({event, _id}, socket)
+       when event in [:announcement_posted, :announcement_read] do
+    {:cont, assign_unread_announcements(socket)}
+  end
+
+  defp handle_tenant_event(_message, socket), do: {:cont, socket}
+
+  # A member deactivated between the mount and this call has no count to show;
+  # the next thing they do is refused anyway, and the member topic is already
+  # sending them to the no-access page.
+  defp assign_unread_announcements(socket) do
+    case Announcements.unread_count(socket.assigns.current_member) do
+      {:ok, count} -> assign(socket, :unread_announcements, count)
+      {:error, :forbidden} -> assign(socket, :unread_announcements, 0)
+    end
+  end
 end

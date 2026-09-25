@@ -14,6 +14,7 @@ Rules only. If a situation requires exception and/or violate any of these rules 
 5. Authorization lives in context functions, which take the acting member as
    their first argument. LiveViews never decide permissions.
 6. PubSub topics include the tenant. No broadcast crosses tenants.
-7. Membership of site and role groups is derived, never written directly.
+7. Every site has one group and one group per team. Membership of them is
+   derived from a member's site and team, never written or edited.
 8. Messages and acknowledgements are never hard-deleted from the system.
 9. Tenant tables change only via tenant migrations (`triplex`); public tables only via repo migrations (`ecto`).

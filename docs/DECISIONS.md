@@ -56,7 +56,7 @@ query (`Members.list_active_members/1`) filters on the authenticated `user_id`
 instead, since its question is which tenants the user may act in at all, and
 invariant 2 names that carve-out.
 
-## 0006 — `NightShift.Accounts` is login, `NightShift.Tenants` is provisioning — DRAFT
+## 0006 — `NightShift.Accounts` is login, `NightShift.Tenants` is provisioning
 
 `mix phx.gen.auth` was generated into `NightShift.Tenants`; that context was
 renamed to `NightShift.Accounts` and `NightShift.Tenants` now owns tenant
@@ -66,7 +66,7 @@ Reason: the table is `tenants`, the schema is `Tenants.Tenant` and Triplex's
 whole vocabulary is "tenant", so any other owner of that word reads as a
 second concept. The rename touched only generated code and generated tests.
 
-## 0007 — `members.site_id` has no foreign key — DRAFT
+## 0007 — `members.site_id` has no foreign key
 
 `members` is in `public` and `sites` is in each tenant schema, so `site_id` is
 a plain NOT NULL `:binary_id` validated by `Members.create_member/2` against
@@ -78,7 +78,7 @@ and nothing but `create_member/2` keeps the two in step. Proposed check: a
 test that `create_member/2` rejects another tenant's `site_id` (present), and
 a deletion path for `sites` must re-check this when 0002+ adds one.
 
-## 0008 — Identity is resolved once; `active` is re-read where it is acted on — DRAFT
+## 0008 — Identity is resolved once; `active` is re-read where it is acted on
 
 The tenant and the acting member are resolved once in `on_mount`, but every
 `Members` function that authorizes re-reads the target member's `active` flag
@@ -89,7 +89,7 @@ or posting "from that moment, including sessions already open", which a stale
 flag in a long-lived socket assign cannot honour. Invariant 3 now says so
 explicitly.
 
-## 0009 — `create_site/2` and `create_member/2` take a tenant, not an acting member — DRAFT
+## 0009 — `create_site/2` and `create_member/2` take a tenant, not an acting member
 
 These two `Members` functions break the "acting member first" shape of
 invariant 5. Rejected: threading a synthetic or nil actor through them to keep
@@ -100,7 +100,7 @@ meaningless exactly where authorization is supposed to live. When member
 creation gains a UI, it gets an actor-first function and these become private
 or seed-only.
 
-## 0010 — Deactivation kills open sockets from one attached hook — DRAFT
+## 0010 — Deactivation kills open sockets from one attached hook
 
 `Members.deactivate_member/2` broadcasts on `Tenancy.topic(tenant, :members)`
 after its transaction commits, and `TenantAuth` handles that message in an
@@ -113,7 +113,7 @@ cannot be forgotten by a new LiveView. Broadcasting after commit, never
 inside the transaction, keeps a rolled-back deactivation from disconnecting
 anyone.
 
-## 0011 — Two persistent test tenants, provisioned before ExUnit starts — DRAFT
+## 0011 — Two persistent test tenants, provisioned before ExUnit starts
 
 `NightShift.TenantSetup.run!/0` find-or-creates two fixed tenants
 (`tenant_one`, `tenant_two`), migrates both, and asserts their schemas exist —
@@ -126,3 +126,55 @@ enough because isolation tests need exactly "mine" and "another". `tenant_two`
 is what `tenant_fixture(:two)` hands out. The setup lives in a compiled module
 rather than inline in `test_helper.exs` so that Triplex 1.3.0's deprecated
 `repo.__adapter__` call warns once at compile time instead of on every run.
+
+## 0012 — Groups are rows; membership is a predicate
+
+Each site has four group rows in its tenant schema — one site group (`team IS
+NULL`) and one per team — and no table records who belongs to them. A member's
+two groups are the rows matching their `site_id` and their `team`, evaluated on
+every call. Rejected: no `groups` table at all, with each message carrying
+`site_id` and a nullable `team` so that group identity is that tuple. Reason:
+routes, PubSub topics, stream dom ids and unread cursors all need one stable id,
+and `/chat/:id` needs something real to authorize. Also rejected: creating group
+rows lazily on first open, which removes the backfill and the cross-context call
+but writes on a read path. This supersedes 0004's wording: the groups are site
+and **team** groups, not role groups — a role group would be a managers' group,
+which plan 0002 criterion 1 forbids. Invariant 7 was amended to match.
+
+## 0013 — `Chat` derives the tenant from the acting member
+
+Every `NightShift.Chat` function takes the acting member first and derives the
+tenant from `member.tenant_id`, through one private helper that also re-reads
+the member's `active`, `site_id` and `team`. Rejected: `(tenant, member, ...)`
+signatures. Reason: the tenant argument would be redundant with the member's own
+`tenant_id`, every function would have to assert the two agree, and a caller
+could pass a mismatched pair. Deriving a tenant from a member record resolved
+from the authenticated session is not deriving it from a param, so invariant 2
+holds. Cost: one extra query per call, which buys fail-closed behaviour on
+deactivation and on reassignment for every chat function without each one
+remembering to ask.
+
+## 0014 — The unread cursor is a `bigserial`, seeded at first sight
+
+`messages.seq` is a `bigserial` in the tenant schema, and `group_reads` stores
+one `last_read_seq` per `(group_id, member_id)`. Rejected: a `last_read_at`
+timestamp. Reason: `:utc_datetime` is second-granular throughout this codebase,
+so two messages posted in the same second could not be ordered or counted
+reliably. A member's first sight of a group writes the group's current maximum
+rather than zero, so inherited history counts as read; the consequence, accepted
+deliberately, is that messages posted before a member ever opened the app never
+appear as unread. `group_reads.last_read_seq` has no database default, so a
+missing seed cannot masquerade as "everything unread".
+
+## 0015 — The message length limit lives in application code
+
+A message body is trimmed, then measured in graphemes, 1 to 2000, by
+`NightShift.Chat.Message.create_changeset/4`. The database enforces only that a
+trimmed body is not empty. Rejected: a `char_length(body) BETWEEN 1 AND 2000`
+check constraint, which shipped first and was wrong — Postgres counts
+codepoints, so 2000 grapheme clusters of `e` + a combining accent are 4000
+characters and a legal message was refused. Reason: no fixed codepoint ceiling
+can stand in for a grapheme one, because a single grapheme may carry arbitrarily
+many combining codepoints, and Postgres has no grapheme-aware length function.
+Cost: the 2000 limit is no longer enforced by the database, so a writer
+bypassing the changeset could exceed it.

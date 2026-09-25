@@ -2,6 +2,23 @@
 
 Newest first. One entry per closed plan.
 
+## 0002 — Chat: site and team groups
+
+Every site now has a group, and every team at that site has one. Nobody
+maintains them: a member is in their site's group and their own team's group
+because of their member record, so a new hire is in the right two groups on
+day one, someone moved to another site is moved with them, and a deactivated
+member is out of both immediately. Messages are text, 1 to 2000 characters,
+and appear for everyone else looking at the group without a reload. Each group
+carries an unread count that clears when you open it, counting from a member's
+first sight of the group rather than from the beginning of its history.
+
+A group shows its newest 200 messages and no further back; nothing is deleted,
+the older messages are simply unreachable. There are still no direct messages,
+ad-hoc groups, attachments, reactions, replies, editing or push notifications.
+Managers can move a member between sites and teams through
+`NightShift.Members.update_assignment/3`, which has no screen yet.
+
 ## 0001 — Foundation: tenants, members, access
 
 A business is now a tenant with its own Postgres schema, and a person reaches

@@ -181,7 +181,7 @@ touching tenant schemas, so one schema per tenant suffices.
    `@moduledoc`, `@spec`,
    raising stubs. Verify: compiles; every call raises.
    **FLAG: invariants 2 and 6.**
-4. [ ] Tenant migrations: `priv/repo/tenant_migrations/` with `sites`. Verify:
+4. [x] Tenant migrations: `priv/repo/tenant_migrations/` with `sites`. Verify:
    provision a scratch tenant, inspect the table, drop it.
    **FLAG: migration, invariant 9.**
 5. [ ] Contract step: `@moduledoc`, `@spec` and raising stubs for
@@ -243,6 +243,9 @@ touching tenant schemas, so one schema per tenant suffices.
   in this plan could satisfy `## Done means` until they were fixed. The format
   failures were `<%= %>` interpolation the LiveView 1.0 formatter rewrites to
   `{}` in `core_components.ex` and the three generated templates.
+- Step 4 added `priv/*/tenant_migrations` to `.formatter.exs`'s
+  `subdirectories`. The root config covered only `priv/*/migrations`, so tenant
+  migrations were outside `mix format --check-formatted` entirely.
 - The CSP is not verified in a browser. `connect-src 'self'` covers the
   LiveView websocket only under CSP Level 3, `style-src` carries
   `'unsafe-inline'` because `Phoenix.LiveView.JS.show/hide` writes inline

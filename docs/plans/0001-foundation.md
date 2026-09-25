@@ -165,14 +165,14 @@ touching tenant schemas, so one schema per tenant suffices.
 
 ## Steps
 
-1. [ ] Rename `NightShift.Tenants` → `NightShift.Accounts` (context, schemas,
+1. [x] Rename `NightShift.Tenants` → `NightShift.Accounts` (context, schemas,
    notifier, `NightShift.AccountsFixtures`, generated tests, `UserAuth`
    alias). No behaviour change. Verify: `/verify` green.
-1b. [ ] Unblock `/verify`: format the four generated files the LiveView 1.0
+1b. [x] Unblock `/verify`: format the four generated files the LiveView 1.0
    formatter rejects, add a Content-Security-Policy to the `:browser` pipeline
    and `force_ssl: [hsts: true]` to `config/prod.exs`. Verify: all four
    `/verify` commands. **FLAG: touches security headers.**
-2. [ ] Public migration: `tenants` (`name`, `schema`) and `members` as
+2. [x] Public migration: `tenants` (`name`, `schema`) and `members` as
    specified; `Tenants.Tenant` schema with the `schema` format validation;
    `reserved_tenants` and `tenant_field: :schema` in `config/config.exs`.
    Verify: `mix ecto.reset`, table shape and indexes from `psql \d`.

@@ -61,7 +61,12 @@ config :logger, :console,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
-config :triplex, repo: NightShift.Repo
+config :triplex,
+  repo: NightShift.Repo,
+  # A `%Tenant{}` reaching Triplex resolves to its schema name, not its id.
+  tenant_field: :schema,
+  # Without this, `Triplex.all/0` reports every Postgres schema as a tenant.
+  reserved_tenants: ["public", "information_schema", ~r/^pg_/]
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

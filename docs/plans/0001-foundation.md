@@ -177,7 +177,7 @@ touching tenant schemas, so one schema per tenant suffices.
    `reserved_tenants` and `tenant_field: :schema` in `config/config.exs`.
    Verify: `mix ecto.reset`, table shape and indexes from `psql \d`.
    **FLAG: migration, invariant 1 exception, supersedes DECISIONS 0003.**
-3. [ ] `NightShift.Tenancy` — `prefix/1` (`%Tenant{}` -> `schema`), `topic/2`,
+3. [x] `NightShift.Tenancy` — `prefix/1` (`%Tenant{}` -> `schema`), `topic/2`,
    `@moduledoc`, `@spec`,
    raising stubs. Verify: compiles; every call raises.
    **FLAG: invariants 2 and 6.**

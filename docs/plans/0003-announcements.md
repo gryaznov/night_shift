@@ -287,12 +287,12 @@ page.
 5. [x] Implement `post_announcement/2`: manager only, body trimmed then 1–2000
        graphemes, `site_id` `nil` or a site of this tenant. **Flagged:** permission
        boundary (criterion 1), invariant 4.
-6. [ ] Implement `list_for_member/1`, `get_for_member/2` and `unread_count/1`,
+6. [x] Implement `list_for_member/1`, `get_for_member/2` and `unread_count/1`,
        author excluded from the audience (criteria 2, 6). **Flagged:** permission
        boundary — targeting decides what a member may read.
-7. [ ] Implement `record_views/2`, idempotent through the composite primary key,
+7. [x] Implement `record_views/2`, idempotent through the composite primary key,
        preserving the first `inserted_at` (criterion 3).
-8. [ ] Implement `list_with_read_state/1` for any manager of the tenant: current
+8. [x] Implement `list_with_read_state/1` for any manager of the tenant: current
        audience, read count, unread members with names (criterion 4). **Flagged:**
        permission boundary.
 9. [ ] Both broadcasts and `subscribe/1`, after their transactions commit
@@ -316,9 +316,11 @@ page.
 
 ## Notes / deviations
 
-- Step 2 and step 3 are committed at 77e525c. Step 5 is done and verified but
-  not yet committed, so its box is ticked ahead of its commit — the one place
-  this file departs from `docs/plans/README.md`.
+- Steps 2 and 3 are committed at 77e525c, step 5 at 34d2e2e. Steps 6, 7 and 8
+  are done and verified but not yet committed.
+- `author_name` and the ordering of `unread` come from `users.email`, because
+  step 1 has not run. Step 1 changes both to `users.name`; nothing else about
+  them changes.
 - `config/dev.exs` gained the per-worktree database suffix at 7ae5f26, outside
   this plan. Every worktree shared `night_shift_dev` until then; `config/test.exs`
   had the derivation already. The suffix now lives in `config/worktree_suffix.exs`,

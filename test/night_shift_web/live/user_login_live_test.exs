@@ -9,8 +9,6 @@ defmodule NightShiftWeb.UserLoginLiveTest do
       {:ok, _lv, html} = live(conn, ~p"/users/log_in")
 
       assert html =~ "Log in"
-      assert html =~ "Register"
-      assert html =~ "Forgot your password?"
     end
 
     test "redirects if already logged in", %{conn: conn} do
@@ -18,7 +16,7 @@ defmodule NightShiftWeb.UserLoginLiveTest do
         conn
         |> log_in_user(user_fixture())
         |> live(~p"/users/log_in")
-        |> follow_redirect(conn, "/")
+        |> follow_redirect(conn, "/workspace")
 
       assert {:ok, _conn} = result
     end
@@ -36,7 +34,7 @@ defmodule NightShiftWeb.UserLoginLiveTest do
 
       conn = submit_form(form, conn)
 
-      assert redirected_to(conn) == ~p"/"
+      assert redirected_to(conn) == ~p"/workspace"
     end
 
     test "redirects to login page with a flash error if there are no valid credentials", %{
@@ -54,34 +52,6 @@ defmodule NightShiftWeb.UserLoginLiveTest do
       assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Invalid email or password"
 
       assert redirected_to(conn) == "/users/log_in"
-    end
-  end
-
-  describe "login navigation" do
-    test "redirects to registration page when the Register button is clicked", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/users/log_in")
-
-      {:ok, _login_live, login_html} =
-        lv
-        |> element(~s|main a:fl-contains("Sign up")|)
-        |> render_click()
-        |> follow_redirect(conn, ~p"/users/register")
-
-      assert login_html =~ "Register"
-    end
-
-    test "redirects to forgot password page when the Forgot Password button is clicked", %{
-      conn: conn
-    } do
-      {:ok, lv, _html} = live(conn, ~p"/users/log_in")
-
-      {:ok, conn} =
-        lv
-        |> element(~s|main a:fl-contains("Forgot your password?")|)
-        |> render_click()
-        |> follow_redirect(conn, ~p"/users/reset_password")
-
-      assert conn.resp_body =~ "Forgot your password?"
     end
   end
 end

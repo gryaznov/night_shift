@@ -125,6 +125,8 @@ defmodule NightShift.Accounts.User do
 
   @doc """
   Confirms the account by setting `confirmed_at`.
+
+  Used when a user changes their email: the new address is taken as confirmed.
   """
   def confirm_changeset(user) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)

@@ -1,30 +1,31 @@
-<header class="px-4 sm:px-6 lg:px-8">
-  <div class="flex items-center justify-between border-b border-zinc-100 py-3 text-sm">
-    <div class="flex items-center gap-4">
-      <a href="/">
-        <img src={~p"/images/logo.svg"} width="36" />
-      </a>
-      <p class="bg-brand/5 text-brand rounded-full px-2 font-medium leading-6">
-        v{Application.spec(:phoenix, :vsn)}
-      </p>
-    </div>
-    <div class="flex items-center gap-4 font-semibold leading-6 text-zinc-900">
-      <a href="https://twitter.com/elixirphoenix" class="hover:text-zinc-700">
-        @elixirphoenix
-      </a>
-      <a href="https://github.com/phoenixframework/phoenix" class="hover:text-zinc-700">
-        GitHub
-      </a>
-      <a
-        href="https://hexdocs.pm/phoenix/overview.html"
-        class="rounded-lg bg-zinc-100 px-2 py-1 hover:bg-zinc-200/80"
-      >
-        Get Started <span aria-hidden="true">&rarr;</span>
-      </a>
-    </div>
-  </div>
+<%!-- The nav appears only where a tenant is in scope; sign-in pages have none. --%>
+<header :if={assigns[:tenant]} class="sticky top-0 z-10 border-b border-zinc-100 bg-white">
+  <nav aria-label="Main" class="flex items-center gap-1 overflow-x-auto px-2 py-2">
+    <.link
+      navigate={~p"/workspace"}
+      data-test-id="nav-workspace"
+      class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+    >
+      Home
+    </.link>
+    <.link
+      navigate={~p"/chat"}
+      data-test-id="nav-chat"
+      class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+    >
+      Chat
+    </.link>
+    <.link
+      navigate={~p"/announcements"}
+      data-test-id="nav-announcements"
+      class="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100"
+    >
+      Announcements
+    </.link>
+  </nav>
 </header>
-<main class="px-4 py-20 sm:px-6 lg:px-8">
+
+<main class="px-4 py-6 sm:px-6">
   <div class="mx-auto max-w-2xl">
     <.flash_group flash={@flash} />
     {@inner_content}

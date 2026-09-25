@@ -76,12 +76,12 @@ defmodule NightShiftWeb.Router do
   scope "/", NightShiftWeb do
     pipe_through [:browser, :redirect_if_user_is_authenticated]
 
+    # No registration, password reset or email confirmation: `## Out of scope` of
+    # plan 0001 puts sign-up and password reset outside the product, and members
+    # come from seeds.
     live_session :redirect_if_user_is_authenticated,
       on_mount: [{NightShiftWeb.UserAuth, :redirect_if_user_is_authenticated}] do
-      live "/users/register", UserRegistrationLive, :new
       live "/users/log_in", UserLoginLive, :new
-      live "/users/reset_password", UserForgotPasswordLive, :new
-      live "/users/reset_password/:token", UserResetPasswordLive, :edit
     end
 
     post "/users/log_in", UserSessionController, :create
@@ -105,6 +105,10 @@ defmodule NightShiftWeb.Router do
         {NightShiftWeb.TenantAuth, :require_active_member}
       ] do
       live "/workspace", WorkspaceLive, :show
+
+      # Reserved by 0001, built by 0002 and 0003.
+      live "/chat", ChatLive, :index
+      live "/announcements", AnnouncementsLive, :index
     end
   end
 
@@ -112,11 +116,5 @@ defmodule NightShiftWeb.Router do
     pipe_through [:browser]
 
     delete "/users/log_out", UserSessionController, :delete
-
-    live_session :current_user,
-      on_mount: [{NightShiftWeb.UserAuth, :mount_current_user}] do
-      live "/users/confirm/:token", UserConfirmationLive, :edit
-      live "/users/confirm", UserConfirmationInstructionsLive, :new
-    end
   end
 end

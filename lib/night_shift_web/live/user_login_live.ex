@@ -5,13 +5,9 @@ defmodule NightShiftWeb.UserLoginLive do
     ~H"""
     <div class="mx-auto max-w-sm">
       <.header class="text-center">
-        Log in to account
+        Log in
         <:subtitle>
-          Don't have an account?
-          <.link navigate={~p"/users/register"} class="font-semibold text-brand hover:underline">
-            Sign up
-          </.link>
-          for an account now.
+          Accounts are created by your business. Ask your manager if you need one.
         </:subtitle>
       </.header>
 
@@ -21,9 +17,6 @@ defmodule NightShiftWeb.UserLoginLive do
 
         <:actions>
           <.input field={@form[:remember_me]} type="checkbox" label="Keep me logged in" />
-          <.link href={~p"/users/reset_password"} class="text-sm font-semibold">
-            Forgot your password?
-          </.link>
         </:actions>
         <:actions>
           <.button phx-disable-with="Logging in..." class="w-full">

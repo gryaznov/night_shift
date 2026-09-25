@@ -221,17 +221,17 @@ touching tenant schemas, so one schema per tenant suffices.
     only, matching plug for controllers, `NoAccessLive`, router
     `live_session`. Verify: spec-tester's access tests.
     **FLAG: permission boundary, invariants 3 and 4.**
-11. [ ] Workspace shell: `WorkspaceLive`, `signed_in_path/1` pointed at it,
+11. [x] Workspace shell: `WorkspaceLive`, `signed_in_path/1` pointed at it,
     stock Phoenix header in `app.html.heex` replaced with a mobile-first nav
     carrying `data-test-id`, reserved routes and stub LiveViews for chat and
     announcements. Verify: spec-tester's criterion 1 test.
 12. [x] Deactivation disconnect: broadcast on deactivate so open sockets
     re-mount and halt to the no-access page. Verify: spec-tester's criterion 5
     test. **FLAG: invariant 4, criterion 5.**
-13. [ ] Seeds: two tenants, two sites each, one manager, at least four staff
+13. [x] Seeds: two tenants, two sites each, one manager, at least four staff
     spanning teams, credentials documented. Verify: `mix ecto.reset` output;
     sign in as a seeded user. **FLAG: depends on the criterion 6 rulings.**
-14. [ ] Remove out-of-scope auth surface: registration, password-reset and
+14. [x] Remove out-of-scope auth surface: registration, password-reset and
     confirmation routes, LiveViews, their generated tests and the
     now-unused `Accounts` functions. Verify: `/verify` green; routes absent.
     **Awaiting ruling; blocks nothing above.**
@@ -294,7 +294,21 @@ touching tenant schemas, so one schema per tenant suffices.
 - Step 11 still owes the reserved chat and announcement routes and the nav; step
   10 shipped `WorkspaceLive` rendering only the tenant name, because the
   `/workspace` route had to exist for step 10's own redirect tests.
-- The CSP is not verified in a browser. `connect-src 'self'` covers the
+- Step 13 read criterion 6's "at least four staff across all teams" as per
+  tenant, and seeded six — every team at both sites — which satisfies it either
+  way. Seeds are idempotent although the criterion only asks for an empty
+  database, because `mix ecto.setup` re-runs them.
+- Step 14 edited generated test files, which an implementation step may not
+  normally do, on an explicit instruction. Criterion 1 ("signs in and sees only
+  that tenant's workspace") governs over `.claude/rules/testing.md` by the source
+  of truth order, and every edit moved an expected path or deleted a case for a
+  route that no longer exists. No assertion was weakened.
+- `Accounts.get_user!/1` is unused but kept: it was already unused before step 14,
+  so removing it is not part of removing the out-of-scope auth surface.
+- `User.confirm_changeset/1` is kept. It is not part of email confirmation as a
+  feature — `user_email_multi/3` uses it to mark a changed email as confirmed.
+- Nothing in the web layer has been seen in a browser. The CSP is not verified
+  there either. `connect-src 'self'` covers the
   LiveView websocket only under CSP Level 3, `style-src` carries
   `'unsafe-inline'` because `Phoenix.LiveView.JS.show/hide` writes inline
   `display`, and `frame-src 'self'` in dev is for the live_reload iframe.

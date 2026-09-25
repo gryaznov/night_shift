@@ -235,7 +235,7 @@ touching tenant schemas, so one schema per tenant suffices.
     confirmation routes, LiveViews, their generated tests and the
     now-unused `Accounts` functions. Verify: `/verify` green; routes absent.
     **Awaiting ruling; blocks nothing above.**
-15. [ ] Wrap: DECISIONS entries for the context rename, for public `members`
+15. [x] Wrap: DECISIONS entries for the context rename, for public `members`
     superseding DECISIONS 0003, and for the test-tenant strategy; amend
     invariant 1 to admit `members`; update `.claude/rules/testing.md`; mark
     this plan done. **FLAG: edits an invariant.**

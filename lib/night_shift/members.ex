@@ -57,8 +57,9 @@ defmodule NightShift.Members do
   @doc """
   The user's active member record in `tenant`, or `nil`.
 
-  This is how the acting member is resolved, once, from the authenticated
-  session. A deactivated member resolves to `nil`.
+  The single-tenant lookup, used by seeds and tests. A session resolves its
+  acting member through `list_active_members/1`, not this. A deactivated member
+  resolves to `nil`.
   """
   @spec get_active_member(User.t(), Tenant.t()) :: Member.t() | nil
   def get_active_member(%User{} = user, %Tenant{} = tenant) do
@@ -68,11 +69,29 @@ defmodule NightShift.Members do
   end
 
   @doc """
+  The user's member record in `tenant`, active or not, or `nil`.
+
+  Deliberately blind to `active`, so a caller asking whether the employment
+  exists at all — seeds, which must not re-create a deactivated member — does not
+  get `nil` for a deactivated one. Never use it to decide whether someone may
+  act: that is `get_active_member/2` or `list_active_members/1`.
+  """
+  @spec get_member(User.t(), Tenant.t()) :: Member.t() | nil
+  def get_member(%User{} = user, %Tenant{} = tenant) do
+    Member
+    |> where(user_id: ^user.id, tenant_id: ^tenant.id)
+    |> Repo.one()
+  end
+
+  @doc """
   The user's active member records, across every tenant they work for, each with
   its tenant preloaded.
 
-  This is the resolution step for a session: it answers both which tenant the
-  user acts in and as which member, in one query.
+  This is how the acting member is resolved, once, from the authenticated
+  session: it answers both which tenant the user acts in and as which member, in
+  one query. It filters on the authenticated `user_id` rather than a passed
+  `tenant_id` — the carve-out invariant 2 names, since the question it answers is
+  which tenants the user may act in at all.
   """
   @spec list_active_members(User.t()) :: [Member.t()]
   def list_active_members(%User{} = user) do

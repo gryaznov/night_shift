@@ -39,3 +39,19 @@ membership drifting from reality — leavers retaining access, new hires missed
 — is assumed to be the core pain. This is an inference, not verified with an
 operator. Question for a practitioner: should site and role groups be
 automatic and exhaustive, or do managers curate them?
+
+## 0005 — `members` lives in `public`, superseding 0003
+
+`members` is a `public` table keyed by `user_id` and `tenant_id`, not a
+per-tenant table; 0003's "employment lives in the tenant schema" is superseded,
+while its ruling that `users` stays in `public` stands. Rejected: a member row
+inside each tenant schema (resolving a session would then scan every schema, and
+a user holding two jobs could not be resolved in one query), and a link-only
+table in `public` pointing at per-tenant employment rows (two writes, two places
+for `active` to disagree). Reason: authorization is one indexed query on
+`public.members`, and it fails closed — no prefix is involved, so no prefix can
+be forgotten. Cost: tenant isolation for this one table is a `tenant_id` filter
+rather than structural, which invariant 2 makes explicit; the session-resolution
+query (`Members.list_active_members/1`) filters on the authenticated `user_id`
+instead, since its question is which tenants the user may act in at all, and
+invariant 2 names that carve-out.

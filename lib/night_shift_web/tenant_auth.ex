@@ -1,7 +1,9 @@
 defmodule NightShiftWeb.TenantAuth do
   @moduledoc """
   Resolves the tenant and the acting member, once, from the authenticated
-  session.
+  session — `on_mount/4` for LiveViews, `require_active_member/2` for
+  controller routes. 0001 routes nothing through the plug; it exists so a
+  controller route added later cannot end up with no membership gate.
 
   Nothing downstream re-derives either, and neither is ever read from a param, a
   path segment or a client event — there is no tenant in any route.
@@ -52,6 +54,31 @@ defmodule NightShiftWeb.TenantAuth do
 
       [] ->
         {:halt, Phoenix.LiveView.redirect(socket, to: ~p"/no-access")}
+    end
+  end
+
+  @doc """
+  Plug assigning `:tenant` and `:current_member`, the controller counterpart of
+  the `on_mount` hook.
+
+  Redirects to the no-access page and halts when the user has no active member
+  record. It cannot disconnect anything mid-request, so a member deactivated
+  after this plug ran is stopped by the context, which re-reads liveness where
+  it acts.
+
+  Runs after `NightShiftWeb.UserAuth`'s `:require_authenticated_user`.
+  """
+  def require_active_member(conn, _opts) do
+    case Members.list_active_members(conn.assigns.current_user) do
+      [member | _rest] ->
+        conn
+        |> Plug.Conn.assign(:current_member, member)
+        |> Plug.Conn.assign(:tenant, member.tenant)
+
+      [] ->
+        conn
+        |> Phoenix.Controller.redirect(to: ~p"/no-access")
+        |> Plug.Conn.halt()
     end
   end
 

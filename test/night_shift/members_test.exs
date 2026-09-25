@@ -217,4 +217,33 @@ defmodule NightShift.MembersTest do
       assert %Member{active: true} = Repo.get!(Member, staff_actor.id)
     end
   end
+
+  # Invariant 4: access ends at deactivation, including for a session already
+  # open. Such a session holds a `%Member{active: true}` struct loaded before the
+  # deactivation and is never told to reload it, so every context function that
+  # decides something has to re-read liveness rather than trust the struct.
+  describe "a stale acting member (criterion 1, invariant 4)" do
+    test "a manager deactivated after their struct was loaded cannot deactivate anyone" do
+      tenant = tenant_fixture(:one)
+      manager = member_fixture(tenant, role: :manager)
+      other_manager = member_fixture(tenant, role: :manager)
+      staff = member_fixture(tenant, role: :staff)
+
+      assert {:ok, _} = Members.deactivate_member(other_manager, manager)
+
+      assert {:error, :forbidden} = Members.deactivate_member(manager, staff)
+      assert %Member{active: true} = Repo.get!(Member, staff.id)
+    end
+
+    test "a member deactivated after their struct was loaded cannot read the member list" do
+      tenant = tenant_fixture(:one)
+      manager = member_fixture(tenant, role: :manager)
+      other_manager = member_fixture(tenant, role: :manager)
+
+      assert {:ok, _} = Members.list_members(manager, tenant)
+      assert {:ok, _} = Members.deactivate_member(other_manager, manager)
+
+      assert {:error, :forbidden} = Members.list_members(manager, tenant)
+    end
+  end
 end

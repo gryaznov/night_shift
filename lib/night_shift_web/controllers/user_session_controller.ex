@@ -4,10 +4,6 @@ defmodule NightShiftWeb.UserSessionController do
   alias NightShift.Accounts
   alias NightShiftWeb.UserAuth
 
-  def create(conn, %{"_action" => "registered"} = params) do
-    create(conn, params, "Account created successfully!")
-  end
-
   def create(conn, %{"_action" => "password_updated"} = params) do
     conn
     |> put_session(:user_return_to, ~p"/users/settings")

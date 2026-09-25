@@ -35,7 +35,9 @@ end
 find_or_create_member = fn tenant, email, attrs ->
   user = find_or_create_user.(email)
 
-  case Members.get_active_member(user, tenant) do
+  # Blind to `active` on purpose: a seeded member deactivated by hand must stay
+  # deactivated, and re-creating one would hit the (user_id, tenant_id) index.
+  case Members.get_member(user, tenant) do
     nil ->
       {:ok, member} = Members.create_member(tenant, Map.put(attrs, :user_id, user.id))
       {user, member}

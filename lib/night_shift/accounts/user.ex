@@ -12,6 +12,7 @@ defmodule NightShift.Accounts.User do
   @foreign_key_type :binary_id
   schema "users" do
     field :email, :string
+    field :name, :string
     field :password, :string, virtual: true, redact: true
     field :hashed_password, :string, redact: true
     field :current_password, :string, virtual: true, redact: true
@@ -45,9 +46,17 @@ defmodule NightShift.Accounts.User do
   """
   def registration_changeset(user, attrs, opts \\ []) do
     user
-    |> cast(attrs, [:email, :password])
+    |> cast(attrs, [:email, :name, :password])
+    |> validate_name()
     |> validate_email(opts)
     |> validate_password(opts)
+  end
+
+  defp validate_name(changeset) do
+    changeset
+    |> update_change(:name, &String.trim/1)
+    |> validate_required([:name])
+    |> validate_length(:name, max: 160)
   end
 
   defp validate_email(changeset, opts) do

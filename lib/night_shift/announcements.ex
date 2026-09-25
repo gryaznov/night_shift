@@ -330,7 +330,7 @@ defmodule NightShift.Announcements do
         m.id != announcement.author_member_id and
           (is_nil(announcement.site_id) or m.site_id == announcement.site_id)
       end)
-      |> Enum.sort_by(& &1.user.email)
+      |> Enum.sort_by(& &1.user.name)
 
     {read, unread} = Enum.split_with(audience, &MapSet.member?(readers, &1.id))
 
@@ -356,7 +356,7 @@ defmodule NightShift.Announcements do
         join: u in User,
         on: u.id == m.user_id,
         where: m.id in ^ids,
-        select: {m.id, u.email}
+        select: {m.id, u.name}
       )
       |> Repo.all()
       |> Map.new()

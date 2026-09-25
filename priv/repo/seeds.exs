@@ -1,5 +1,6 @@
 # Seeds two businesses, each with two sites, one manager and six staff covering
-# every team at both sites, and a few messages in every group.
+# every team at both sites, a few messages in every group, and two
+# announcements per business.
 #
 #     mix run priv/repo/seeds.exs
 #
@@ -7,6 +8,7 @@
 # users, sites or members. Sign-in credentials are printed at the end.
 
 alias NightShift.Accounts
+alias NightShift.Announcements
 alias NightShift.Chat
 alias NightShift.Members
 alias NightShift.Tenants
@@ -22,10 +24,26 @@ slug = fn value ->
   value |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-") |> String.trim("-")
 end
 
+# A seeded person's name is their address made readable — invented people would
+# be no more real and harder to match to a login.
+name_from_email = fn email ->
+  email
+  |> String.split("@")
+  |> hd()
+  |> String.split(~r/[._-]/)
+  |> Enum.map_join(" ", &String.capitalize/1)
+end
+
 find_or_create_user = fn email ->
   case Accounts.get_user_by_email(email) do
     nil ->
-      {:ok, user} = Accounts.register_user(%{email: email, password: password})
+      {:ok, user} =
+        Accounts.register_user(%{
+          email: email,
+          name: name_from_email.(email),
+          password: password
+        })
+
       user
 
     user ->
@@ -111,7 +129,7 @@ credentials =
     staff =
       for {{_site_id, team}, {user, member}} <- staff_members do
         site = Enum.find(sites, &(&1.id == member.site_id))
-        {user.email, site.name, team, :staff}
+        {user.name, user.email, site.name, team, :staff}
       end
 
     # A few messages per group, so a seeded sign-in lands on something to read.
@@ -149,7 +167,36 @@ credentials =
       end
     end
 
-    {business.name, [{manager_user.email, first_site.name, :front_of_house, :manager} | staff]}
+    # Idempotent in the same way the messages above are: a business that already
+    # has announcements keeps exactly what it has. Nobody but the author has read
+    # these, so a seeded sign-in lands on an unread badge.
+    case Announcements.list_with_read_state(manager_member) do
+      {:ok, []} ->
+        {:ok, _} =
+          Announcements.post_announcement(manager_member, %{
+            body: """
+            Payroll cut-off moves to the 25th from this month. Get your hours in \
+            before then — anything later lands in the following run.\
+            """
+          })
+
+        {:ok, _} =
+          Announcements.post_announcement(manager_member, %{
+            site_id: first_site.id,
+            body: """
+            #{first_site.name}: the cellar hatch is being replaced on Thursday. \
+            Use the side door for deliveries and keep the yard clear from 07:00.\
+            """
+          })
+
+      {:ok, _existing} ->
+        :ok
+    end
+
+    manager_row =
+      {manager_user.name, manager_user.email, first_site.name, :front_of_house, :manager}
+
+    {business.name, [manager_row | staff]}
   end
 
 IO.puts("\nSign-in credentials — password for every account: #{password}\n")
@@ -157,8 +204,11 @@ IO.puts("\nSign-in credentials — password for every account: #{password}\n")
 for {business, people} <- credentials do
   IO.puts(business)
 
-  for {email, site, team, role} <- people do
-    IO.puts("  #{String.pad_trailing(email, 40)} #{role} · #{site} · #{team}")
+  for {name, email, site, team, role} <- people do
+    IO.puts(
+      "  #{String.pad_trailing(name, 26)} #{String.pad_trailing(email, 42)} " <>
+        "#{role} · #{site} · #{team}"
+    )
   end
 
   IO.puts("")

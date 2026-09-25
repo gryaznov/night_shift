@@ -217,3 +217,51 @@ earlier one's `down`. Rejected: making `delete_groups/0` a no-op, which fixes
 the rollback but leaves backfilled groups behind if the down is ever run without
 the drops. The exception is confined to unreleased tenant migrations from the
 0002 branch; the rule stands for everything already deployed.
+
+## 0019 — An announcement's audience is derived, never stored
+
+An announcement carries only a nullable `site_id`; who it reached is computed
+on every read as the active members of the tenant that it targets, minus its
+author. Rejected: a `recipients` row per member written at publication, and a
+read counter denormalised onto the announcement. Reason: criterion 4 of plan
+0003 requires a member deactivated after publication to leave the figures and a
+member hired after it to appear as not yet read, which a snapshot contradicts in
+both directions and a stored counter gets wrong the moment anyone is
+deactivated. Cost: the manager's read-state view is four queries — announcements
+and their acknowledgements under the tenant prefix, the tenant's active members
+from `public`, and the author names — instead of one, and it grows with the
+tenant rather than with the page.
+
+## 0020 — Reading an announcement is implicit, and recorded once
+
+An announcement is acknowledged when it is rendered in a recipient's list, with
+no control to click; `(announcement_id, member_id)` is the primary key of
+`announcement_acknowledgements`, so the first sighting is the recorded one and
+is never overwritten. Rejected: an explicit "mark as read" button, which
+`## Intent` of plan 0003 originally described. Reason: criterion 3 as amended
+says the read is recorded when the announcement appears. Accepted consequence,
+stated at the time: criterion 4's "who has not read" therefore means "who has
+not opened the announcements page since it was published", and the unread
+counter falls to zero on every visit — an acknowledgement is a page-visit
+receipt, not a deliberate act.
+
+## 0021 — Announcements keep per-item receipts, chat keeps a cursor
+
+Chat records how far a member has read with one integer per group (0014);
+announcements record one row per member per announcement. Rejected: reusing the
+cursor for announcements. Reason: criterion 4 needs the names of the people who
+have not read a *particular* announcement, which a high-water mark cannot
+answer. The two also disagree on purpose: 0002 ruling 3 seeds a new hire's chat
+cursor so inherited history counts as already read, while criterion 4 counts a
+member hired after publication as not yet read. Both are right for their
+feature; neither should be made to match the other.
+
+## 0022 — `users.name`, because an email address is not a name
+
+`users` gained a required `name`, backfilled from the local part of the address
+for rows that predate it. Rejected: showing `users.email` wherever criterion 4
+asks for "the names of those who have not" read, and putting the name on
+`members` instead. Reason: a manager chasing non-readers reads a list of people,
+and `kitchen.seafront@harbour.test` is not one; a name on `members` would let
+one person be two people across two businesses, which nothing asks for. Seeds
+derive a readable name from the address rather than inventing people.

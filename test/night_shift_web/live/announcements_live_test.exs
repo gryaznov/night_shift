@@ -27,13 +27,10 @@ defmodule NightShiftWeb.AnnouncementsLiveTest do
   markup for their own post keyed by its id (unambiguous under criterion 4),
   without asserting anything about the surrounding stream/container.
 
-  Ambiguity this file also does not resolve: `data-test-id="unread-members-<id>"`
-  is said to list "names", but neither `NightShift.Members.Member` nor
-  `NightShift.Accounts.User` (read in full for this task) has a `:name`
-  field — only `User.email`. Tests here assert the unread member's `email`
-  appears in that element, on the assumption "name" means "email" absent any
-  other identifying field; if the rendered text uses something else, these
-  assertions will fail for a reason unrelated to the criterion they test.
+  Resolved since this file was written: `data-test-id="unread-members-<id>"` is
+  said to list "names", and `NightShift.Accounts.User` had only `:email` at the
+  time. Step 1 of the plan added `users.name`, so the assertion here is on the
+  unread member's `name`.
   """
 
   # Tenant fixtures come from the two schemas `test_helper.exs` provisions;
@@ -42,7 +39,6 @@ defmodule NightShiftWeb.AnnouncementsLiveTest do
 
   import Phoenix.LiveViewTest
   import NightShift.AccountsFixtures
-  import NightShift.AnnouncementsFixtures
   import NightShift.MembersFixtures
   import NightShift.TenantsFixtures
 
@@ -197,7 +193,7 @@ defmodule NightShiftWeb.AnnouncementsLiveTest do
 
       updated_html = render(watcher_view)
       assert updated_html =~ ~r/read-count-#{announcement.id}"[^>]*>\s*1\s*\/\s*1/
-      refute updated_html =~ staff_user.email
+      refute updated_html =~ staff_user.name
     end
   end
 
@@ -225,7 +221,7 @@ defmodule NightShiftWeb.AnnouncementsLiveTest do
 
       assert html =~ ~s(data-test-id="read-count-#{announcement.id}")
       assert html =~ ~s(data-test-id="unread-members-#{announcement.id}")
-      assert html =~ staff_user.email
+      assert html =~ staff_user.name
     end
 
     test "an authoring manager also sees read-state markup for their own announcement, by id", %{
@@ -283,13 +279,13 @@ defmodule NightShiftWeb.AnnouncementsLiveTest do
       {:ok, watcher_view, before_html} =
         conn |> log_in_user(watcher_user) |> live(~p"/announcements")
 
-      assert before_html =~ staff_user.email
+      assert before_html =~ staff_user.name
 
       assert {:ok, _} = Announcements.record_views(staff, [announcement])
 
       after_html = render(watcher_view)
       assert after_html =~ ~r/read-count-#{announcement.id}"[^>]*>\s*1\s*\/\s*1/
-      refute after_html =~ staff_user.email
+      refute after_html =~ staff_user.name
     end
   end
 

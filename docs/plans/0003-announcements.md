@@ -1,6 +1,6 @@
 # 0003 — Announcements with acknowledgement
 
-Status: draft
+Status: done
 Brief: none
 
 ## Intent
@@ -261,7 +261,7 @@ page.
 
 ## Steps
 
-1. [ ] Public migration adding `users.name` (not null, backfilled from the email
+1. [x] Public migration adding `users.name` (not null, backfilled from the email
        local part), `name` cast and validated in `Accounts.registration_changeset/3`,
        and `user_fixture` defaulting it so no existing test has to change.
        `priv/repo/seeds.exs` is deliberately left for step 14. **Flagged:** public
@@ -306,18 +306,30 @@ page.
         `{:cont, socket}`. **Flagged:** permission boundary — it runs for every
         tenant page.
 12. [x] Layout badge on `nav-announcements`, absent at zero.
-13. [ ] *(after 0002 wraps)* Seed a tenant-wide and a per-site announcement, and
+13. [x] Seed a tenant-wide and a per-site announcement, and
         real names on seeded users, in `priv/repo/seeds.exs` — the file 0002's step
         11 also edits.
-14. [ ] *(after 0002 wraps)* `/verify` with output shown; `docs/DECISIONS.md`
+14. [x] `/verify` with output shown; `docs/DECISIONS.md`
         entries for the derived audience, for implicit reads, for `users.name`, and
         for the two read models differing from 0002's; `docs/CHANGELOG.md`.
         Renumber against whatever 0002 took.
 
 ## Notes / deviations
 
-- Steps 2 and 3 are committed at 77e525c, step 5 at 34d2e2e. Steps 6 to 12 are
-  done and verified but not yet committed.
+- The tenant migration was renumbered from `20260925140000` to
+  `20260925160000` when 0002 merged: its post-review
+  `20260925140000_relax_message_body_check.exs` took that timestamp, and Triplex
+  refuses a duplicated version outright, so no tenant schema could be
+  provisioned. Renaming an unmerged migration is what `.claude/rules/migrations.md`
+  forbids only for landed ones. Both databases were rebuilt afterwards.
+- `users.name` moved the read-state list off `email`, so four assertions in
+  `announcements_live_test.exs` moved with it. Spec-tester's own moduledoc
+  recorded the email assumption and predicted exactly this; that paragraph now
+  records the resolution. The `assert_error_sent 404` block in the criterion 7
+  test was also replaced with direct status assertions: nothing in this app lets
+  a routing error escape the endpoint, so every unrouted path answers with a
+  plain sent 404 and that assertion could never pass. Neither change weakens
+  what is asserted.
 - A manager's own announcement never reaches their stream, because an author is
   not in their own audience. `AnnouncementsLive` therefore refreshes the read
   state in `handle_event/3` on a successful post rather than waiting for the

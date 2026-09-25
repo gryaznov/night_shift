@@ -159,7 +159,7 @@ defmodule NightShiftWeb.AnnouncementsLive do
             data-test-id={"unread-members-#{state.announcement.id}"}
             class="mt-2 space-y-1 text-xs leading-5 text-zinc-700"
           >
-            <li :for={member <- state.unread}>{member.user.email}</li>
+            <li :for={member <- state.unread}>{member.user.name}</li>
           </ul>
         </div>
       </section>

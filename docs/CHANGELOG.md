@@ -2,6 +2,29 @@
 
 Newest first. One entry per closed plan.
 
+## 0003 — Announcements with acknowledgement
+
+A manager can now publish an announcement to a whole business or to one of its
+sites, and see who has read it. Announcements are separate from chat and cannot
+be replied to. Staff cannot publish. Nothing about an announcement can be
+edited or deleted afterwards, by anyone, including its author.
+
+A recipient's announcements are listed newest first, and one counts as read
+when it appears on their page — there is nothing to click. The first time is
+the recorded time and it never changes. An announcement published while someone
+has the page open appears there without a reload, and an unread count rides on
+every page of a business, rising as announcements arrive and falling as they are
+read.
+
+The manager's view of who has read is worked out fresh each time, so it follows
+the staff list rather than the past: someone deactivated after publication drops
+out of the figures, and someone hired after it appears as not yet read. An
+author is never in their own audience. Users now carry a name, which is what
+that list shows.
+
+There is no scheduling, expiry, reminder or escalation, no targeting by team or
+by individual, and no push, email or SMS delivery.
+
 ## 0002 — Chat: site and team groups
 
 Every site now has a group, and every team at that site has one. Nobody

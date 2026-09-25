@@ -15,19 +15,32 @@ defmodule NightShift.Members do
   import Ecto.Query
 
   alias NightShift.Accounts.User
+  alias NightShift.Chat
   alias NightShift.Members.{Member, Site}
   alias NightShift.Repo
   alias NightShift.Tenancy
   alias NightShift.Tenants.Tenant
 
   @doc """
-  Creates a site in `tenant`'s schema.
+  Creates a site in `tenant`'s schema, together with its groups.
+
+  The site group and the three team groups are created in the same transaction,
+  by `NightShift.Chat.create_groups_for_site/2`. A site without its groups would
+  leave every member posted to it with fewer than the two groups criterion 1
+  promises, and nothing else in the product creates a site, so this is the only
+  place that guarantee can live.
   """
   @spec create_site(Tenant.t(), map()) :: {:ok, Site.t()} | {:error, Ecto.Changeset.t()}
   def create_site(%Tenant{} = tenant, attrs) when is_map(attrs) do
-    %Site{}
-    |> Site.changeset(attrs)
-    |> Repo.insert(prefix: Tenancy.prefix(tenant))
+    Repo.transaction(fn ->
+      with {:ok, site} <-
+             %Site{} |> Site.changeset(attrs) |> Repo.insert(prefix: Tenancy.prefix(tenant)),
+           {:ok, _groups} <- Chat.create_groups_for_site(tenant, site) do
+        site
+      else
+        {:error, %Ecto.Changeset{} = changeset} -> Repo.rollback(changeset)
+      end
+    end)
   end
 
   @doc """

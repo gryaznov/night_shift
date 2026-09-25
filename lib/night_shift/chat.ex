@@ -22,10 +22,14 @@ defmodule NightShift.Chat do
   id is real.
   """
 
+  import Ecto.Query
+
   alias NightShift.Chat.Group
   alias NightShift.Chat.Message
   alias NightShift.Members.Member
   alias NightShift.Members.Site
+  alias NightShift.Repo
+  alias NightShift.Tenancy
   alias NightShift.Tenants.Tenant
 
   @doc """
@@ -34,10 +38,30 @@ defmodule NightShift.Chat do
   Takes a tenant rather than an acting member, for the reason
   `NightShift.Members.create_site/2` does — nothing in the product creates a
   site, so there is no actor whose permission could be decided.
+
+  Idempotent: a site that already has its groups keeps them, and the existing
+  rows are returned. `NightShift.Members.create_site/2` calls this, so a caller
+  that also calls it directly must not be punished for it, and two concurrent
+  calls cannot produce a second site group — the unique indexes decide, not the
+  read that preceded them.
   """
   @spec create_groups_for_site(Tenant.t(), Site.t()) :: {:ok, [Group.t()]}
-  def create_groups_for_site(%Tenant{} = _tenant, %Site{} = _site) do
-    raise "not implemented"
+  def create_groups_for_site(%Tenant{} = tenant, %Site{} = site) do
+    prefix = Tenancy.prefix(tenant)
+
+    for team <- [nil | Member.teams()] do
+      %Group{}
+      |> Group.create_changeset(site.id, team)
+      |> Repo.insert(prefix: prefix, on_conflict: :nothing)
+    end
+
+    groups =
+      Group
+      |> where(site_id: ^site.id)
+      |> Repo.all(prefix: prefix)
+      |> sort_site_group_first()
+
+    {:ok, groups}
   end
 
   @doc """
@@ -48,16 +72,33 @@ defmodule NightShift.Chat do
   current newest message, so inherited history counts as read.
   """
   @spec list_groups(Member.t()) :: {:ok, [Group.t()]} | {:error, :forbidden}
-  def list_groups(%Member{} = _actor) do
-    raise "not implemented"
+  def list_groups(%Member{} = actor) do
+    with {:ok, member, tenant} <- acting(actor) do
+      groups =
+        Group
+        |> where([g], g.site_id == ^member.site_id)
+        |> where([g], is_nil(g.team) or g.team == ^member.team)
+        |> preload(:site)
+        |> Repo.all(prefix: Tenancy.prefix(tenant))
+        |> sort_site_group_first()
+
+      {:ok, groups}
+    else
+      :error -> {:error, :forbidden}
+    end
   end
 
   @doc """
   One of the acting member's groups by id, with `:site` loaded.
   """
   @spec get_group(Member.t(), Ecto.UUID.t()) :: {:ok, Group.t()} | {:error, :forbidden}
-  def get_group(%Member{} = _actor, group_id) when is_binary(group_id) do
-    raise "not implemented"
+  def get_group(%Member{} = actor, group_id) when is_binary(group_id) do
+    with {:ok, member, tenant} <- acting(actor),
+         {:ok, group} <- fetch_group(member, tenant, group_id) do
+      {:ok, Repo.preload(group, :site, prefix: Tenancy.prefix(tenant))}
+    else
+      _ -> {:error, :forbidden}
+    end
   end
 
   @doc """
@@ -112,5 +153,42 @@ defmodule NightShift.Chat do
   @spec subscribe(Member.t(), Group.t()) :: :ok | {:error, :forbidden}
   def subscribe(%Member{} = _actor, %Group{} = _group) do
     raise "not implemented"
+  end
+
+  # The acting member is re-read before every decision, and the tenant comes from
+  # the row that read returns. Invariant 3 fixes identity at the session boundary
+  # and forbids re-deriving it; it does not make a stale `active`, `site_id` or
+  # `team` authoritative, which invariants 4 and 7 both forbid.
+  defp acting(%Member{id: id}) do
+    case Repo.get(Member, id) do
+      %Member{active: true} = member -> {:ok, member, Repo.get!(Tenant, member.tenant_id)}
+      _ -> :error
+    end
+  end
+
+  # A group is always re-read by id under the acting member's own prefix, so
+  # another tenant's group is not refused — it is not there to find. The caller's
+  # struct is never trusted: it may be stale, or from anywhere.
+  defp fetch_group(%Member{} = member, %Tenant{} = tenant, group_id) do
+    with {:ok, id} <- Ecto.UUID.cast(group_id),
+         %Group{} = group <- Repo.get(Group, id, prefix: Tenancy.prefix(tenant)),
+         true <- member_of?(member, group) do
+      {:ok, group}
+    else
+      _ -> :error
+    end
+  end
+
+  # The whole of group membership (invariant 7). Nothing is stored, nothing is
+  # managed: a member is in their site's group and in their own team's group.
+  defp member_of?(%Member{} = member, %Group{} = group) do
+    group.site_id == member.site_id and (is_nil(group.team) or group.team == member.team)
+  end
+
+  defp sort_site_group_first(groups) do
+    Enum.sort_by(groups, fn
+      %Group{team: nil} -> {0, nil}
+      %Group{team: team} -> {1, Enum.find_index(Member.teams(), &(&1 == team))}
+    end)
   end
 end

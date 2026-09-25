@@ -6,7 +6,7 @@ defmodule NightShift.Accounts do
   import Ecto.Query, warn: false
   alias NightShift.Repo
 
-  alias NightShift.Accounts.{User, UserToken, UserNotifier}
+  alias NightShift.Accounts.{User, UserNotifier, UserToken}
 
   ## Database getters
 

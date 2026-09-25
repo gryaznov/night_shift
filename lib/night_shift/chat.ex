@@ -85,19 +85,23 @@ defmodule NightShift.Chat do
   """
   @spec list_groups(Member.t()) :: {:ok, [Group.t()]} | {:error, :forbidden}
   def list_groups(%Member{} = actor) do
-    with {:ok, member, tenant} <- acting(actor) do
-      groups =
-        Group
-        |> where([g], g.site_id == ^member.site_id)
-        |> where([g], is_nil(g.team) or g.team == ^member.team)
-        |> preload(:site)
-        |> Repo.all(prefix: Tenancy.prefix(tenant))
-        |> sort_site_group_first()
-        |> Enum.map(&%{&1 | unread_count: count_unread(Tenancy.prefix(tenant), &1.id, member.id)})
+    case acting(actor) do
+      {:ok, member, tenant} ->
+        prefix = Tenancy.prefix(tenant)
 
-      {:ok, groups}
-    else
-      :error -> {:error, :forbidden}
+        groups =
+          Group
+          |> where([g], g.site_id == ^member.site_id)
+          |> where([g], is_nil(g.team) or g.team == ^member.team)
+          |> preload(:site)
+          |> Repo.all(prefix: prefix)
+          |> sort_site_group_first()
+          |> Enum.map(&%{&1 | unread_count: count_unread(prefix, &1.id, member.id)})
+
+        {:ok, groups}
+
+      :error ->
+        {:error, :forbidden}
     end
   end
 

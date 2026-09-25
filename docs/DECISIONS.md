@@ -178,3 +178,42 @@ can stand in for a grapheme one, because a single grapheme may carry arbitrarily
 many combining codepoints, and Postgres has no grapheme-aware length function.
 Cost: the 2000 limit is no longer enforced by the database, so a writer
 bypassing the changeset could exceed it.
+
+## 0016 — A moved member's open group view is ejected by the next message
+
+`NightShiftWeb.GroupLive.handle_info/2` re-reads the acting member through
+`NightShift.Chat.mark_read/2` and redirects to `/chat` when that returns
+`{:error, :forbidden}`, so a member moved to another site or team stops seeing
+messages posted to the group they left. A PubSub subscription outlives the
+membership that authorized it, and plan 0002 criterion 5 forbids reading a group
+you are not in, not only posting to one — a message rendered after the move is a
+read. Rejected: discarding that return value, which is what shipped first and
+what plan 0002 ruling 6 described. Rejected also: broadcasting an
+assignment change and ejecting on the move itself, which needs a new topic and a
+new event for a case that resolves itself on the next message or the next mount.
+History already on screen at the moment of the move is left alone.
+
+## 0017 — The unread cursor only moves forward
+
+`group_reads.last_read_seq` is upserted with
+`GREATEST(group_reads.last_read_seq, EXCLUDED.last_read_seq)`. One member can
+have several sessions — two tabs, a phone and a desk — computing different
+newest values and writing them in either order, and an unconditional `set` let
+the later writer install the smaller one and make read messages unread again.
+Rejected: a `where: r.last_read_seq < ^seq` guard on the conflict, equivalent in
+effect but stating a filter on a row where the intent is an invariant of the
+column.
+
+## 0018 — `20260925120000_create_chat_tables.exs` was edited after 0001 closed
+
+`.claude/rules/migrations.md` forbids editing a migration once plan 0001 is
+done; this one was edited anyway, so that `delete_groups/0` clears `group_reads`
+and `messages` before `groups`. Ecto reverses `change/0` in reverse order, so
+`DELETE FROM groups` ran while both referencing tables still existed with
+`on_delete: :restrict`, and a rollback on any tenant holding a message aborted
+with a foreign-key violation. Rejected: a follow-up migration, which is what the
+rule prescribes and which cannot work — a later migration cannot alter an
+earlier one's `down`. Rejected: making `delete_groups/0` a no-op, which fixes
+the rollback but leaves backfilled groups behind if the down is ever run without
+the drops. The exception is confined to unreleased tenant migrations from the
+0002 branch; the rule stands for everything already deployed.

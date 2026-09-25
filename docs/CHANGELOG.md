@@ -19,6 +19,12 @@ ad-hoc groups, attachments, reactions, replies, editing or push notifications.
 Managers can move a member between sites and teams through
 `NightShift.Members.update_assignment/3`, which has no screen yet.
 
+Someone moved while they have a group open keeps that page until the next
+message arrives in it; at that point they are sent back to their group list,
+because they are no longer in the group they were reading. An unread count
+never goes backwards, so reading on your phone cannot make a group look unread
+again on the desk.
+
 ## 0001 — Foundation: tenants, members, access
 
 A business is now a tenant with its own Postgres schema, and a person reaches

@@ -242,25 +242,33 @@ defmodule NightShift.Members do
       |> Repo.all()
 
     current = Enum.find(rows, &(&1.id == target.id))
-    active_managers = Enum.filter(rows, &(&1.active and &1.role == :manager))
 
-    cond do
-      is_nil(current) ->
-        Repo.rollback(:forbidden)
-
-      not current.active ->
-        Repo.rollback(:already_inactive)
-
-      current.role == :manager and length(active_managers) <= 1 ->
-        Repo.rollback(:last_manager)
-
-      true ->
+    case refusal(current, rows) do
+      nil ->
         case Repo.update(Member.deactivation_changeset(current)) do
           {:ok, member} -> member
           {:error, changeset} -> Repo.rollback(changeset)
         end
+
+      reason ->
+        Repo.rollback(reason)
     end
   end
+
+  # Why this deactivation is refused, or `nil` if it is not. Decided against the
+  # same locked read `deactivate/1` took, so the manager count cannot change
+  # between the question and the answer.
+  defp refusal(nil, _rows), do: :forbidden
+  defp refusal(%Member{active: false}, _rows), do: :already_inactive
+
+  defp refusal(%Member{role: :manager}, rows) do
+    case Enum.count(rows, &(&1.active and &1.role == :manager)) do
+      n when n <= 1 -> :last_manager
+      _ -> nil
+    end
+  end
+
+  defp refusal(%Member{}, _rows), do: nil
 
   # The target is locked for the same reason `deactivate/1` locks: its `active`
   # flag is read and then written against, and a concurrent deactivation must not

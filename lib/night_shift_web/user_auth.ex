@@ -1,4 +1,12 @@
 defmodule NightShiftWeb.UserAuth do
+  @moduledoc """
+  Session authentication: signing a user in and out, and the plugs and
+  `on_mount` hooks that put the authenticated user on a conn or a socket.
+
+  Who a user may act as inside a business is not decided here — that is
+  `NightShiftWeb.MemberAuth` and the `NightShift.Members` context.
+  """
+
   use NightShiftWeb, :verified_routes
 
   import Plug.Conn

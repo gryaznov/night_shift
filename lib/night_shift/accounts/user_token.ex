@@ -1,4 +1,11 @@
 defmodule NightShift.Accounts.UserToken do
+  @moduledoc """
+  `public.users_tokens`: session and emailed tokens for a user.
+
+  Session tokens are stored as issued; emailed tokens are stored hashed, so the
+  table cannot be used to sign in as someone if it leaks.
+  """
+
   use Ecto.Schema
   import Ecto.Query
   alias NightShift.Accounts.UserToken

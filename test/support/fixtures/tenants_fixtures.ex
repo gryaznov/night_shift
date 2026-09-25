@@ -7,8 +7,8 @@ defmodule NightShift.TenantsFixtures do
   the suite starts and these helpers hand them out.
   """
 
-  alias NightShift.TenantSetup
   alias NightShift.Tenants
+  alias NightShift.TenantSetup
 
   @doc """
   One of the two tenants the suite is run against.

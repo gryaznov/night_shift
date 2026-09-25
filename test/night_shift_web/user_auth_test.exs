@@ -1,9 +1,9 @@
 defmodule NightShiftWeb.UserAuthTest do
   use NightShiftWeb.ConnCase, async: true
 
-  alias Phoenix.LiveView
   alias NightShift.Accounts
   alias NightShiftWeb.UserAuth
+  alias Phoenix.LiveView
   import NightShift.AccountsFixtures
 
   @remember_me_cookie "_night_shift_web_user_remember_me"

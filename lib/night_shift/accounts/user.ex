@@ -1,4 +1,11 @@
 defmodule NightShift.Accounts.User do
+  @moduledoc """
+  `public.users`: a person's login, shared across every business they work for.
+
+  A user is not a membership. Which businesses this person may act in, and as
+  what, lives in `NightShift.Members.Member`.
+  """
+
   use Ecto.Schema
   import Ecto.Changeset
   @primary_key {:id, :binary_id, autogenerate: true}

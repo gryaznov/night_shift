@@ -1,4 +1,8 @@
 defmodule NightShift.Accounts.UserNotifier do
+  @moduledoc """
+  Account emails: confirmation, password reset, and email change.
+  """
+
   import Swoosh.Email
 
   alias NightShift.Mailer

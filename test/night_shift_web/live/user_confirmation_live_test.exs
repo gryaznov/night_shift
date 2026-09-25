@@ -2,9 +2,9 @@ defmodule NightShiftWeb.UserConfirmationLiveTest do
   use NightShiftWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
-  import NightShift.TenantsFixtures
+  import NightShift.AccountsFixtures
 
-  alias NightShift.Tenants
+  alias NightShift.Accounts
   alias NightShift.Repo
 
   setup do
@@ -20,7 +20,7 @@ defmodule NightShiftWeb.UserConfirmationLiveTest do
     test "confirms the given token once", %{conn: conn, user: user} do
       token =
         extract_user_token(fn url ->
-          Tenants.deliver_user_confirmation_instructions(user, url)
+          Accounts.deliver_user_confirmation_instructions(user, url)
         end)
 
       {:ok, lv, _html} = live(conn, ~p"/users/confirm/#{token}")
@@ -36,9 +36,9 @@ defmodule NightShiftWeb.UserConfirmationLiveTest do
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~
                "User confirmed successfully"
 
-      assert Tenants.get_user!(user.id).confirmed_at
+      assert Accounts.get_user!(user.id).confirmed_at
       refute get_session(conn, :user_token)
-      assert Repo.all(Tenants.UserToken) == []
+      assert Repo.all(Accounts.UserToken) == []
 
       # when not logged in
       {:ok, lv, _html} = live(conn, ~p"/users/confirm/#{token}")
@@ -83,7 +83,7 @@ defmodule NightShiftWeb.UserConfirmationLiveTest do
       assert Phoenix.Flash.get(conn.assigns.flash, :error) =~
                "User confirmation link is invalid or it has expired"
 
-      refute Tenants.get_user!(user.id).confirmed_at
+      refute Accounts.get_user!(user.id).confirmed_at
     end
   end
 end

@@ -1,4 +1,4 @@
-defmodule NightShift.Tenants.UserNotifier do
+defmodule NightShift.Accounts.UserNotifier do
   import Swoosh.Email
 
   alias NightShift.Mailer

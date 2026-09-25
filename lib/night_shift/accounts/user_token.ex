@@ -1,7 +1,7 @@
-defmodule NightShift.Tenants.UserToken do
+defmodule NightShift.Accounts.UserToken do
   use Ecto.Schema
   import Ecto.Query
-  alias NightShift.Tenants.UserToken
+  alias NightShift.Accounts.UserToken
 
   @hash_algorithm :sha256
   @rand_size 32
@@ -19,7 +19,7 @@ defmodule NightShift.Tenants.UserToken do
     field :token, :binary
     field :context, :string
     field :sent_to, :string
-    belongs_to :user, NightShift.Tenants.User
+    belongs_to :user, NightShift.Accounts.User
 
     timestamps(type: :utc_datetime, updated_at: false)
   end

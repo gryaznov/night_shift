@@ -3,13 +3,39 @@ defmodule NightShiftWeb.Router do
 
   import NightShiftWeb.UserAuth
 
+  # `frame-src` admits the live_reload iframe in dev only. `style-src` needs
+  # `'unsafe-inline'` because Phoenix.LiveView.JS.show/hide sets inline display.
+  @frame_src if Application.compile_env(:night_shift, :dev_routes),
+               do: "'self'",
+               else: "'none'"
+
+  @content_security_policy Enum.join(
+                             [
+                               "default-src 'self'",
+                               "script-src 'self'",
+                               "style-src 'self' 'unsafe-inline'",
+                               "img-src 'self' data:",
+                               "font-src 'self' data:",
+                               "connect-src 'self'",
+                               "frame-src #{@frame_src}",
+                               "frame-ancestors 'none'",
+                               "base-uri 'self'",
+                               "form-action 'self'",
+                               "object-src 'none'"
+                             ],
+                             "; "
+                           )
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {NightShiftWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+
+    plug :put_secure_browser_headers,
+         %{"content-security-policy" => @content_security_policy}
+
     plug :fetch_current_user
   end
 

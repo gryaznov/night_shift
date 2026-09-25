@@ -168,6 +168,10 @@ touching tenant schemas, so one schema per tenant suffices.
 1. [ ] Rename `NightShift.Tenants` → `NightShift.Accounts` (context, schemas,
    notifier, `NightShift.AccountsFixtures`, generated tests, `UserAuth`
    alias). No behaviour change. Verify: `/verify` green.
+1b. [ ] Unblock `/verify`: format the four generated files the LiveView 1.0
+   formatter rejects, add a Content-Security-Policy to the `:browser` pipeline
+   and `force_ssl: [hsts: true]` to `config/prod.exs`. Verify: all four
+   `/verify` commands. **FLAG: touches security headers.**
 2. [ ] Public migration: `tenants` (`name`, `schema`) and `members` as
    specified; `Tenants.Tenant` schema with the `schema` format validation;
    `reserved_tenants` and `tenant_field: :schema` in `config/config.exs`.
@@ -234,4 +238,14 @@ touching tenant schemas, so one schema per tenant suffices.
 
 ## Notes / deviations
 
-None yet.
+- Step 1b was not in the original plan. `mix format --check-formatted` and
+  `mix sobelow --exit` both failed at `488af8e`, on generated code, so no step
+  in this plan could satisfy `## Done means` until they were fixed. The format
+  failures were `<%= %>` interpolation the LiveView 1.0 formatter rewrites to
+  `{}` in `core_components.ex` and the three generated templates.
+- The CSP is not verified in a browser. `connect-src 'self'` covers the
+  LiveView websocket only under CSP Level 3, `style-src` carries
+  `'unsafe-inline'` because `Phoenix.LiveView.JS.show/hide` writes inline
+  `display`, and `frame-src 'self'` in dev is for the live_reload iframe.
+  LiveDashboard runs through the same pipeline. First real exercise is step 11,
+  when the app is run.

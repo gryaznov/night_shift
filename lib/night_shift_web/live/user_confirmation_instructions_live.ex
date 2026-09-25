@@ -1,7 +1,7 @@
 defmodule NightShiftWeb.UserConfirmationInstructionsLive do
   use NightShiftWeb, :live_view
 
-  alias NightShift.Tenants
+  alias NightShift.Accounts
 
   def render(assigns) do
     ~H"""
@@ -33,8 +33,8 @@ defmodule NightShiftWeb.UserConfirmationInstructionsLive do
   end
 
   def handle_event("send_instructions", %{"user" => %{"email" => email}}, socket) do
-    if user = Tenants.get_user_by_email(email) do
-      Tenants.deliver_user_confirmation_instructions(
+    if user = Accounts.get_user_by_email(email) do
+      Accounts.deliver_user_confirmation_instructions(
         user,
         &url(~p"/users/confirm/#{&1}")
       )

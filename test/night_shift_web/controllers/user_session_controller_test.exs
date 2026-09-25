@@ -1,7 +1,7 @@
 defmodule NightShiftWeb.UserSessionControllerTest do
   use NightShiftWeb.ConnCase, async: true
 
-  import NightShift.TenantsFixtures
+  import NightShift.AccountsFixtures
 
   setup do
     %{user: user_fixture()}

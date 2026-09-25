@@ -1,7 +1,7 @@
-defmodule NightShift.TenantsFixtures do
+defmodule NightShift.AccountsFixtures do
   @moduledoc """
   This module defines test helpers for creating
-  entities via the `NightShift.Tenants` context.
+  entities via the `NightShift.Accounts` context.
   """
 
   def unique_user_email, do: "user#{System.unique_integer()}@example.com"
@@ -18,7 +18,7 @@ defmodule NightShift.TenantsFixtures do
     {:ok, user} =
       attrs
       |> valid_user_attributes()
-      |> NightShift.Tenants.register_user()
+      |> NightShift.Accounts.register_user()
 
     user
   end

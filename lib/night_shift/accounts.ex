@@ -1,12 +1,12 @@
-defmodule NightShift.Tenants do
+defmodule NightShift.Accounts do
   @moduledoc """
-  The Tenants context.
+  The Accounts context.
   """
 
   import Ecto.Query, warn: false
   alias NightShift.Repo
 
-  alias NightShift.Tenants.{User, UserToken, UserNotifier}
+  alias NightShift.Accounts.{User, UserToken, UserNotifier}
 
   ## Database getters
 

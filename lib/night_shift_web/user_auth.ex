@@ -4,7 +4,7 @@ defmodule NightShiftWeb.UserAuth do
   import Plug.Conn
   import Phoenix.Controller
 
-  alias NightShift.Tenants
+  alias NightShift.Accounts
 
   # Make the remember me cookie valid for 60 days.
   # If you want bump or reduce this value, also change
@@ -26,7 +26,7 @@ defmodule NightShiftWeb.UserAuth do
   if you are not using LiveView.
   """
   def log_in_user(conn, user, params \\ %{}) do
-    token = Tenants.generate_user_session_token(user)
+    token = Accounts.generate_user_session_token(user)
     user_return_to = get_session(conn, :user_return_to)
 
     conn
@@ -74,7 +74,7 @@ defmodule NightShiftWeb.UserAuth do
   """
   def log_out_user(conn) do
     user_token = get_session(conn, :user_token)
-    user_token && Tenants.delete_user_session_token(user_token)
+    user_token && Accounts.delete_user_session_token(user_token)
 
     if live_socket_id = get_session(conn, :live_socket_id) do
       NightShiftWeb.Endpoint.broadcast(live_socket_id, "disconnect", %{})
@@ -92,7 +92,7 @@ defmodule NightShiftWeb.UserAuth do
   """
   def fetch_current_user(conn, _opts) do
     {user_token, conn} = ensure_user_token(conn)
-    user = user_token && Tenants.get_user_by_session_token(user_token)
+    user = user_token && Accounts.get_user_by_session_token(user_token)
     assign(conn, :current_user, user)
   end
 
@@ -177,7 +177,7 @@ defmodule NightShiftWeb.UserAuth do
   defp mount_current_user(socket, session) do
     Phoenix.Component.assign_new(socket, :current_user, fn ->
       if user_token = session["user_token"] do
-        Tenants.get_user_by_session_token(user_token)
+        Accounts.get_user_by_session_token(user_token)
       end
     end)
   end

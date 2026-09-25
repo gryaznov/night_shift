@@ -1,7 +1,7 @@
 defmodule NightShiftWeb.UserForgotPasswordLive do
   use NightShiftWeb, :live_view
 
-  alias NightShift.Tenants
+  alias NightShift.Accounts
 
   def render(assigns) do
     ~H"""
@@ -32,8 +32,8 @@ defmodule NightShiftWeb.UserForgotPasswordLive do
   end
 
   def handle_event("send_email", %{"user" => %{"email" => email}}, socket) do
-    if user = Tenants.get_user_by_email(email) do
-      Tenants.deliver_user_reset_password_instructions(
+    if user = Accounts.get_user_by_email(email) do
+      Accounts.deliver_user_reset_password_instructions(
         user,
         &url(~p"/users/reset_password/#{&1}")
       )

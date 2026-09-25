@@ -1,7 +1,7 @@
 defmodule NightShiftWeb.UserResetPasswordLive do
   use NightShiftWeb, :live_view
 
-  alias NightShift.Tenants
+  alias NightShift.Accounts
 
   def render(assigns) do
     ~H"""
@@ -44,7 +44,7 @@ defmodule NightShiftWeb.UserResetPasswordLive do
     form_source =
       case socket.assigns do
         %{user: user} ->
-          Tenants.change_user_password(user)
+          Accounts.change_user_password(user)
 
         _ ->
           %{}
@@ -56,7 +56,7 @@ defmodule NightShiftWeb.UserResetPasswordLive do
   # Do not log in the user after reset password to avoid a
   # leaked token giving the user access to the account.
   def handle_event("reset_password", %{"user" => user_params}, socket) do
-    case Tenants.reset_user_password(socket.assigns.user, user_params) do
+    case Accounts.reset_user_password(socket.assigns.user, user_params) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -69,12 +69,12 @@ defmodule NightShiftWeb.UserResetPasswordLive do
   end
 
   def handle_event("validate", %{"user" => user_params}, socket) do
-    changeset = Tenants.change_user_password(socket.assigns.user, user_params)
+    changeset = Accounts.change_user_password(socket.assigns.user, user_params)
     {:noreply, assign_form(socket, Map.put(changeset, :action, :validate))}
   end
 
   defp assign_user_and_token(socket, %{"token" => token}) do
-    if user = Tenants.get_user_by_reset_password_token(token) do
+    if user = Accounts.get_user_by_reset_password_token(token) do
       assign(socket, user: user, token: token)
     else
       socket

@@ -2,7 +2,7 @@ defmodule NightShiftWeb.UserLoginLiveTest do
   use NightShiftWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
-  import NightShift.TenantsFixtures
+  import NightShift.AccountsFixtures
 
   describe "Log in page" do
     test "renders log in page", %{conn: conn} do

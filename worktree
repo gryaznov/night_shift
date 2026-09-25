@@ -1,0 +1,347 @@
+#!/usr/bin/env bash
+#
+# Create, list and remove git worktrees that can run the test suite concurrently
+# with every other worktree.
+#
+# Each worktree derives its own test database from its git worktree name — see
+# the header of config/test.exs. Endpoint ports need no derivation: the test
+# endpoint runs with `server: false`, so nothing binds a port. Nothing is
+# exported and nothing has to be remembered; `mix test` works in a new worktree
+# with an empty environment. What a new worktree does need is its own deps and
+# asset binaries, because _build and deps are per-directory and gitignored. That
+# is what `new` is for.
+#
+#   ./worktree new <branch> [--as <NNNN>] [--from <ref>] [--no-open] [--no-warm]
+#   ./worktree ls
+#   ./worktree rm <NNNN|path> [--delete-branch] [--force]
+#
+# The worktree directory is named after the four-digit number in the branch name
+# when there is one — `./worktree new plan-0044-rocket` creates night_shift-0044
+# — so the VS Code window title tells you which plan you are working on.
+#
+# Progress goes to stderr and the new worktree's absolute path is the only thing
+# written to stdout, so `cd "$(./worktree new foo --no-open)"` works if you want
+# it to.
+#
+# ---------------------------------------------------------------------------
+# Starting work on docs/plans/0044-implement-rocket.md
+# ---------------------------------------------------------------------------
+#
+#   ./worktree new plan-0044-rocket
+#
+# Takes a few minutes: it creates ../night_shift-0044 on a new branch off your
+# current one, copies the files listed in .worktreeinclude, installs deps,
+# compiles, builds assets, creates and migrates the test database, and opens the
+# worktree in VS Code. Check what it got:
+#
+#   ./worktree ls
+#   /.../night_shift      [main]               database night_shift_test
+#   /.../night_shift-0044 [plan-0044-rocket]   database night_shift_test_0044
+#
+# A worktree showing night_shift_test is running a config/test.exs that predates
+# the per-worktree derivation — it will collide with the main worktree.
+#
+# Then work in the new window. `mix test` needs nothing set in the environment.
+# Note the main worktree holds main, so a worktree can never check it out; to
+# bring one up to date use `git rebase main` from its own branch.
+#
+# ---------------------------------------------------------------------------
+# Finishing
+# ---------------------------------------------------------------------------
+#
+# In the worktree, before you leave it: update docs/DECISIONS.md if a decision
+# was made, and tick the plan's ## Steps. Run `/verify` and show its output.
+# Then commit and merge back.
+#
+# After it merges, back in the MAIN worktree — rm refuses to run anywhere else:
+#
+#   git pull
+#   ./worktree rm 0044 --delete-branch
+#
+# That removes the directory, drops night_shift_test_0044, and deletes the
+# branch. It refuses if the worktree has uncommitted or untracked files; --force
+# discards them, so look before using it.
+#
+# If the branch was squash-merged, --delete-branch fails: it uses
+# `git branch -d`, and a squash creates a commit that is not a descendant of
+# your branch. The worktree and database are already gone by then, so just
+# finish with `git branch -D plan-0044-rocket`.
+#
+# Slot numbers are reused. A later `new` can take 0044 again, along with its
+# database name; nothing survives removal, so this is harmless.
+
+set -euo pipefail
+
+# Where worktrees are created. Defaults to the repository's parent directory,
+# matching the `../night_shift-NNNN` convention. Override when that directory is
+# synced or backed up — a worktree carries a few hundred MB of _build and deps
+# that you almost certainly do not want uploaded anywhere.
+WORKTREE_BASE="${WORKTREE_BASE:-}"
+
+PSQL_HOST="${PGHOST:-localhost}"
+PSQL_USER="${PGUSER:-postgres}"
+export PGPASSWORD="${PGPASSWORD:-postgres}"
+
+say() { printf '%s\n' "$*" >&2; }
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+step() { printf '\n==> %s\n' "$*" >&2; }
+
+require_main_worktree() {
+  git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+  local git_dir
+  git_dir="$(git rev-parse --absolute-git-dir)"
+
+  if [ "$(basename "$(dirname "$git_dir")")" = "worktrees" ]; then
+    die "run this from the main worktree, not from a linked one"
+  fi
+
+  local top
+  top="$(git rev-parse --show-toplevel)"
+  [ "$PWD" = "$top" ] || die "run this from the repository root ($top)"
+}
+
+# The database name is computed by config/test.exs. Ask mix rather than
+# recomputing it here — two implementations of that rule would drift, and the
+# failure mode is dropping the wrong database.
+# `< /dev/null` is load-bearing: these run inside a `while read` loop in cmd_ls,
+# and mix reads stdin, which silently eats the rest of the loop's input.
+derived_database() {
+  local dir="$1"
+  (cd "$dir" && MIX_ENV=test mix run --no-start -e \
+    'IO.puts(Application.get_env(:night_shift, NightShift.Repo)[:database])' 2>/dev/null < /dev/null | tail -n 1)
+}
+
+next_number() {
+  local base="$1" highest=0 dir name
+  for dir in "$base"/night_shift-[0-9][0-9][0-9][0-9]; do
+    [ -d "$dir" ] || continue
+    name="$(basename "$dir")"
+    name="${name#night_shift-}"
+    # Base 10 explicitly: 0008 is not octal here.
+    if [ "$((10#$name))" -gt "$highest" ]; then highest="$((10#$name))"; fi
+  done
+  printf '%04d' "$((highest + 1))"
+}
+
+cmd_new() {
+  local branch="" from="" open=1 warm=1 number=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --as) number="${2:-}"; shift 2 ;;
+      --from) from="${2:-}"; shift 2 ;;
+      --no-open) open=0; shift ;;
+      --no-warm) warm=0; shift ;;
+      -*) die "unknown option: $1" ;;
+      *) [ -z "$branch" ] || die "unexpected argument: $1"; branch="$1"; shift ;;
+    esac
+  done
+
+  [ -n "$branch" ] || die "usage: ./worktree new <branch> [--as <NNNN>] [--from <ref>] [--no-open] [--no-warm]"
+
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    die "branch already exists: $branch"
+  fi
+
+  local repo_root base path
+  repo_root="$PWD"
+  base="${WORKTREE_BASE:-$(dirname "$repo_root")}"
+  [ -d "$base" ] || die "worktree base directory does not exist: $base"
+
+  # The directory number is the plan number whenever the branch name carries
+  # one, so `plan-0044-rocket` lands in night_shift-0044 and the VS Code window
+  # title says which plan you are on. `tr` splits the name into digit runs and
+  # the first run of exactly four wins, so `fix-12345-thing` is not mistaken for
+  # one. Explicit --as overrides; the next free slot is the fallback.
+  if [ -z "$number" ]; then
+    number="$(printf '%s' "$branch" | tr -cs '0-9' '\n' | grep -xE '[0-9]{4}' | head -n 1 || true)"
+  fi
+
+  if [ -n "$number" ]; then
+    case "$number" in
+      *[!0-9]*) die "--as takes digits only, got: $number" ;;
+    esac
+    number="$(printf '%04d' "$((10#$number))")"
+  else
+    number="$(next_number "$base")"
+  fi
+
+  path="$base/night_shift-$number"
+  if [ -e "$path" ]; then
+    die "already exists: $path (pass --as <NNNN> to choose another number)"
+  fi
+
+  from="${from:-$(git rev-parse --abbrev-ref HEAD)}"
+
+  step "Creating worktree night_shift-$number on branch $branch (from $from)"
+  git worktree add "$path" -b "$branch" "$from" >&2
+
+  step "Copying local config"
+  if [ -f "$repo_root/.worktreeinclude" ]; then
+    while IFS= read -r entry || [ -n "$entry" ]; do
+      [ -n "$entry" ] || continue
+      case "$entry" in \#*) continue ;; esac
+      if [ -e "$repo_root/$entry" ]; then
+        cp -R "$repo_root/$entry" "$path/$entry"
+        say "  copied $entry"
+      else
+        say "  skipped $entry (not present)"
+      fi
+    done < "$repo_root/.worktreeinclude"
+  else
+    say "  no .worktreeinclude, nothing to copy"
+  fi
+
+  step "Installing Elixir dependencies"
+  (cd "$path" && mix deps.get >&2)
+
+  # assets/node_modules is gitignored, so a fresh worktree has none. Only some
+  # checkouts carry a package.json at all; skip the step when there is none.
+  # npm, not yarn: package-lock.json is what is committed.
+  if [ -f "$path/assets/package.json" ]; then
+    step "Installing JS dependencies"
+    (cd "$path" && npm --prefix assets ci >&2)
+  fi
+
+  # Must precede assets.build: the :phoenix_live_view compiler emits
+  # phoenix-colocated/night_shift into _build, and esbuild fails to resolve that
+  # import without it.
+  step "Compiling"
+  (cd "$path" && mix compile >&2)
+
+  # tailwind and esbuild resolve their binaries inside this worktree's own
+  # _build, so a fresh worktree has neither.
+  step "Installing and building assets"
+  (cd "$path" && mix assets.setup >&2 && mix assets.build >&2)
+
+  if [ "$warm" -eq 1 ]; then
+    # Pays the expensive part of a first run here, where a failure is visible,
+    # rather than in the middle of your first real test run.
+    step "Creating and migrating the test database"
+    (cd "$path" && MIX_ENV=test mix do ecto.create, ecto.migrate >&2)
+  fi
+
+  step "Ready"
+  say "  path      $path"
+  say "  branch    $branch"
+  say "  database  $(derived_database "$path")"
+
+  if [ "$open" -eq 1 ] && command -v code >/dev/null 2>&1; then
+    code "$path"
+    say "  opened in VS Code"
+  fi
+
+  printf '%s\n' "$path"
+}
+
+cmd_ls() {
+  # --porcelain rather than the human listing: paths may contain spaces, and
+  # this repository already lives one rename away from "Google Drive".
+  local line path branch db
+  path=""
+  branch=""
+
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) path="${line#worktree }" ;;
+      "branch "*) branch="${line#branch refs/heads/}" ;;
+      "detached") branch="(detached)" ;;
+      "")
+        [ -n "$path" ] || continue
+        if [ -f "$path/mix.exs" ]; then
+          db="$(derived_database "$path")"
+          printf '%s [%s]\n    database %s\n' "$path" "$branch" "${db:-?}"
+        else
+          printf '%s [%s]\n' "$path" "$branch"
+        fi
+        path=""
+        branch=""
+        ;;
+    esac
+  done < <(git worktree list --porcelain)
+}
+
+cmd_rm() {
+  local target="" delete_branch=0 force=0
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --delete-branch) delete_branch=1; shift ;;
+      --force) force=1; shift ;;
+      -*) die "unknown option: $1" ;;
+      *) [ -z "$target" ] || die "unexpected argument: $1"; target="$1"; shift ;;
+    esac
+  done
+
+  [ -n "$target" ] || die "usage: ./worktree rm <NNNN|path> [--delete-branch] [--force]"
+
+  # A bare number is resolved against the worktrees git knows about rather than
+  # against a base directory, so `rm 0088` works whether or not the worktree was
+  # created with WORKTREE_BASE set.
+  local path padded
+  if [ -d "$target" ]; then
+    path="$target"
+  else
+    case "$target" in
+      *[!0-9]*) die "expected a four-digit number or a path, got: $target" ;;
+    esac
+    padded="$(printf '%04d' "$((10#$target))")"
+    path="$(git worktree list --porcelain | sed -n 's|^worktree ||p' |
+      grep -E "/night_shift-$padded\$" | head -n 1 || true)"
+    [ -n "$path" ] || die "no worktree named night_shift-$padded (see ./worktree ls)"
+  fi
+
+  [ -d "$path" ] || die "no such worktree: $path"
+
+  local branch database
+  branch="$(git -C "$path" rev-parse --abbrev-ref HEAD)"
+
+  # Read the database name before the worktree is gone; afterwards there is
+  # nothing left to ask.
+  database="$(derived_database "$path")"
+  case "$database" in
+    night_shift_test_*) ;;
+    *) die "refusing to continue: derived database '$database' is not a worktree database" ;;
+  esac
+
+  step "Removing worktree $path"
+  if [ "$force" -eq 1 ]; then
+    git worktree remove --force "$path" >&2
+  elif ! git worktree remove "$path" >&2; then
+    die "worktree has uncommitted or untracked files. Commit them, or re-run with --force to discard them."
+  fi
+
+  step "Dropping database $database"
+  dropdb --if-exists -h "$PSQL_HOST" -U "$PSQL_USER" "$database" >&2
+
+  if [ "$delete_branch" -eq 1 ]; then
+    step "Deleting branch $branch"
+    git branch -d "$branch" >&2
+  else
+    say ""
+    say "Branch $branch was kept. Delete it with: git branch -d $branch"
+  fi
+}
+
+case "${1:-}" in
+  new) require_main_worktree; shift; cmd_new "$@" ;;
+  ls)  require_main_worktree; shift; cmd_ls "$@" ;;
+  rm)  require_main_worktree; shift; cmd_rm "$@" ;;
+  *)
+    cat >&2 <<'USAGE'
+usage:
+  ./worktree new <branch> [--as <NNNN>] [--from <ref>] [--no-open] [--no-warm]
+  ./worktree ls
+  ./worktree rm <NNNN|path> [--delete-branch] [--force]
+
+The directory is named after the four-digit number in the branch name when there
+is one: `./worktree new plan-0044-rocket` creates night_shift-0044. Use --as to
+set it explicitly; without either, the next free slot is used.
+
+Set WORKTREE_BASE to create worktrees somewhere other than the repository's
+parent directory.
+USAGE
+    exit 1
+    ;;
+esac

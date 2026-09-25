@@ -67,6 +67,22 @@ defmodule NightShift.Members.Member do
   end
 
   @doc """
+  Changeset moving a member to another site or team.
+
+  Casts `:site_id` and `:team` and nothing else, so a move can never change a
+  role, a tenant or a user. Both remain required: a member without a site or a
+  team has no groups, which criterion 1 forbids. Passing only one of them keeps
+  the other as it is.
+  """
+  @spec assignment_changeset(t(), map()) :: Ecto.Changeset.t()
+  def assignment_changeset(member, attrs) do
+    member
+    |> cast(attrs, [:site_id, :team])
+    |> validate_required([:site_id, :team])
+    |> check_constraint(:team, name: :team_is_known)
+  end
+
+  @doc """
   Changeset ending a member's access. Keeps the record; nothing is deleted.
   """
   @spec deactivation_changeset(t()) :: Ecto.Changeset.t()

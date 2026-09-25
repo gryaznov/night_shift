@@ -158,8 +158,16 @@ defmodule NightShift.Members do
           {:ok, Member.t()}
           | {:error, :forbidden | :already_inactive}
           | {:error, Ecto.Changeset.t()}
-  def update_assignment(%Member{} = _actor, %Member{} = _target, attrs) when is_map(attrs) do
-    raise "not implemented"
+  def update_assignment(%Member{} = actor, %Member{} = target, attrs) when is_map(attrs) do
+    with {:ok, actor} <- still_active(actor),
+         true <- actor.role == :manager,
+         true <- actor.tenant_id == target.tenant_id,
+         {:ok, member} <- Repo.transaction(fn -> move(target, attrs) end) do
+      {:ok, member}
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :forbidden}
+    end
   end
 
   @doc """
@@ -248,6 +256,37 @@ defmodule NightShift.Members do
 
       true ->
         case Repo.update(Member.deactivation_changeset(current)) do
+          {:ok, member} -> member
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+    end
+  end
+
+  # The target is locked for the same reason `deactivate/1` locks: its `active`
+  # flag is read and then written against, and a concurrent deactivation must not
+  # slip between the two and leave a deactivated member moved.
+  defp move(%Member{} = target, attrs) do
+    current =
+      Member
+      |> where([m], m.id == ^target.id)
+      |> lock("FOR UPDATE")
+      |> Repo.one()
+
+    tenant = Repo.get!(Tenant, target.tenant_id)
+
+    cond do
+      is_nil(current) ->
+        Repo.rollback(:forbidden)
+
+      not current.active ->
+        Repo.rollback(:already_inactive)
+
+      true ->
+        current
+        |> Member.assignment_changeset(attrs)
+        |> validate_site_of_tenant(tenant)
+        |> Repo.update()
+        |> case do
           {:ok, member} -> member
           {:error, changeset} -> Repo.rollback(changeset)
         end

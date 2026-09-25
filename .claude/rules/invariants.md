@@ -2,10 +2,10 @@
 
 Rules only. If a situation requires exception and/or violate any of these rules - write that into docs/DECISIONS.md.
 
-1. Tenant data lives only in tenant schemas. `public` schema holds only tenants, users
-   and auth tokens. No table name exists in both. No tenant's data can live in `public`.
-2. Every tenant query sets `prefix:` through the single tenancy helper. A prefix
-   is never built from params, paths or client events.
+1. `public` holds only tenants, users, auth tokens and members.
+   Everything else a businessowns lives in its tenant schema. No table name exists in both.
+2. Tenant isolation is never implicit: a tenant-schema query sets `prefix:`
+   through the single tenancy helper, a `members` query filters on an explicitly passed `tenant_id`. Neither is ever derived from params, paths or client events.
 3. The tenant and acting member are resolved once, in `on_mount` or a plug, from
    the authenticated session. Nothing downstream re-derives or changes them.
 4. A user cannot act in a tenant in any way except for an active membership. A

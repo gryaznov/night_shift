@@ -203,20 +203,20 @@ touching tenant schemas, so one schema per tenant suffices.
    existing suite from a dropped database and again from a warm one; show
    tenant migrations running once per run, not per test.
    **FLAG: criterion 7.**
-7. [ ] `spec-tester`, fresh session: context and LiveView tests for criteria
+7. [x] `spec-tester`, fresh session: context and LiveView tests for criteria
    1–5 from the criteria alone, including the negative cases required by
    `.claude/rules/testing.md` — other tenant, other member, deactivated
    member, staff attempting deactivation. No implementation in this step.
 8. [x] Implement `NightShift.Tenants` provisioning: create the row, create the
    Triplex schema, run tenant migrations. Verify: spec-tester's tenant tests.
-9. [ ] Implement `NightShift.Members`: sites in the tenant schema, members in
+9. [x] Implement `NightShift.Members`: sites in the tenant schema, members in
    `public`, `site_id` validated against the acting tenant's sites, criterion 3
    validations, and authorization in the context with the acting member first.
    Verify: spec-tester's member and isolation tests, including a read of
    tenant B's members with tenant A's member as actor.
    **FLAG: permission boundary, invariants 4 and 5, and the lost structural
    isolation named above.**
-10. [ ] `NightShiftWeb.TenantAuth`: `on_mount :require_active_member`
+10. [x] `NightShiftWeb.TenantAuth`: `on_mount :require_active_member`
     assigning `:tenant` and `:current_member` from the authenticated session
     only, matching plug for controllers, `NoAccessLive`, router
     `live_session`. Verify: spec-tester's access tests.
@@ -225,7 +225,7 @@ touching tenant schemas, so one schema per tenant suffices.
     stock Phoenix header in `app.html.heex` replaced with a mobile-first nav
     carrying `data-test-id`, reserved routes and stub LiveViews for chat and
     announcements. Verify: spec-tester's criterion 1 test.
-12. [ ] Deactivation disconnect: broadcast on deactivate so open sockets
+12. [x] Deactivation disconnect: broadcast on deactivate so open sockets
     re-mount and halt to the no-access page. Verify: spec-tester's criterion 5
     test. **FLAG: invariant 4, criterion 5.**
 13. [ ] Seeds: two tenants, two sites each, one manager, at least four staff
@@ -268,6 +268,32 @@ touching tenant schemas, so one schema per tenant suffices.
   `repo.__adapter__` without parentheses, which Elixir 1.17 deprecates; from a
   `.exs` script that warning and its stacktrace print on every `mix test`, while
   from a compiled module it prints once at compile time.
+- Step 7's spec-tester was given a web contract the plan had not fixed, because
+  criteria 1 and 5 cannot be tested without route names: `/workspace`
+  (`WorkspaceLive`) and `/no-access` (`NoAccessLive`), tenant and member
+  resolved in `on_mount` from the session. Steps 10 and 11 must match those
+  paths or the tests are wrong rather than red. The tests require two new
+  `data-test-id` attributes: `workspace-tenant-name` on `/workspace` and
+  `no-access-message` on `/no-access`.
+- Step 7 read criterion 5's "disconnected" as the LiveView process terminating,
+  and asserts `{:DOWN, ...}` after deactivation. A redirect-only implementation
+  fails that test. Unresolved — decide before step 12.
+- Step 7 left `deactivate_member/2`'s `:last_manager` and `:already_inactive`
+  branches untested: they are in the step 5 contract but not in criteria 1–5.
+  Step 9 implements them, including the plan's serialized last-manager check,
+  with no test behind them.
+- Step 9 was amended after it was verified, on an explicit decision: identity is
+  resolved once from the session, but a member's `active` state is re-read where
+  it is acted on (`still_active/1`). Invariant 3 fixes identity and forbids
+  re-deriving it; it does not make a stale `active` flag authoritative, which
+  invariant 4 forbids. Invariant 3 wants a clause saying so — queued for step 15.
+- Criterion 5 is enforced in `TenantAuth`'s `attach_hook`, not in each LiveView,
+  so no tenant view can omit it. `Members.deactivate_member/2` broadcasts on
+  `Tenancy.topic(tenant, :members)` after the transaction commits, never inside
+  it.
+- Step 11 still owes the reserved chat and announcement routes and the nav; step
+  10 shipped `WorkspaceLive` rendering only the tenant name, because the
+  `/workspace` route had to exist for step 10's own redirect tests.
 - The CSP is not verified in a browser. `connect-src 'self'` covers the
   LiveView websocket only under CSP Level 3, `style-src` carries
   `'unsafe-inline'` because `Phoenix.LiveView.JS.show/hide` writes inline

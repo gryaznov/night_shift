@@ -12,21 +12,33 @@ defmodule NightShift.Members do
   actor, not adding an actor argument to these.
   """
 
+  import Ecto.Query
+
   alias NightShift.Accounts.User
   alias NightShift.Members.{Member, Site}
+  alias NightShift.Repo
+  alias NightShift.Tenancy
   alias NightShift.Tenants.Tenant
 
   @doc """
   Creates a site in `tenant`'s schema.
   """
   @spec create_site(Tenant.t(), map()) :: {:ok, Site.t()} | {:error, Ecto.Changeset.t()}
-  def create_site(%Tenant{}, attrs) when is_map(attrs), do: raise("not implemented")
+  def create_site(%Tenant{} = tenant, attrs) when is_map(attrs) do
+    %Site{}
+    |> Site.changeset(attrs)
+    |> Repo.insert(prefix: Tenancy.prefix(tenant))
+  end
 
   @doc """
   Every site of `tenant`.
   """
   @spec list_sites(Tenant.t()) :: [Site.t()]
-  def list_sites(%Tenant{}), do: raise("not implemented")
+  def list_sites(%Tenant{} = tenant) do
+    Site
+    |> order_by(asc: :name)
+    |> Repo.all(prefix: Tenancy.prefix(tenant))
+  end
 
   @doc """
   Creates a member of `tenant` for a user.
@@ -35,7 +47,12 @@ defmodule NightShift.Members do
   missing any of them, and a `:site_id` that is not a site of `tenant`.
   """
   @spec create_member(Tenant.t(), map()) :: {:ok, Member.t()} | {:error, Ecto.Changeset.t()}
-  def create_member(%Tenant{}, attrs) when is_map(attrs), do: raise("not implemented")
+  def create_member(%Tenant{} = tenant, attrs) when is_map(attrs) do
+    %Member{}
+    |> Member.create_changeset(attrs, tenant.id)
+    |> validate_site_of_tenant(tenant)
+    |> Repo.insert()
+  end
 
   @doc """
   The user's active member record in `tenant`, or `nil`.
@@ -44,13 +61,27 @@ defmodule NightShift.Members do
   session. A deactivated member resolves to `nil`.
   """
   @spec get_active_member(User.t(), Tenant.t()) :: Member.t() | nil
-  def get_active_member(%User{}, %Tenant{}), do: raise("not implemented")
+  def get_active_member(%User{} = user, %Tenant{} = tenant) do
+    Member
+    |> where(user_id: ^user.id, tenant_id: ^tenant.id, active: true)
+    |> Repo.one()
+  end
 
   @doc """
-  The user's active member records, across every tenant they work for.
+  The user's active member records, across every tenant they work for, each with
+  its tenant preloaded.
+
+  This is the resolution step for a session: it answers both which tenant the
+  user acts in and as which member, in one query.
   """
   @spec list_active_members(User.t()) :: [Member.t()]
-  def list_active_members(%User{}), do: raise("not implemented")
+  def list_active_members(%User{} = user) do
+    Member
+    |> where(user_id: ^user.id, active: true)
+    |> order_by(asc: :inserted_at)
+    |> preload(:tenant)
+    |> Repo.all()
+  end
 
   @doc """
   Every member of `tenant`, active or not, as seen by `actor`.
@@ -58,7 +89,20 @@ defmodule NightShift.Members do
   Returns `{:error, :forbidden}` when `actor` is not a member of `tenant`.
   """
   @spec list_members(Member.t(), Tenant.t()) :: {:ok, [Member.t()]} | {:error, :forbidden}
-  def list_members(%Member{}, %Tenant{}), do: raise("not implemented")
+  def list_members(%Member{} = actor, %Tenant{} = tenant) do
+    with {:ok, actor} <- still_active(actor),
+         true <- actor.tenant_id == tenant.id do
+      members =
+        Member
+        |> where(tenant_id: ^tenant.id)
+        |> order_by(asc: :inserted_at)
+        |> Repo.all()
+
+      {:ok, members}
+    else
+      _ -> {:error, :forbidden}
+    end
+  end
 
   @doc """
   Deactivates `target`, ending their access to that tenant from that moment.
@@ -81,5 +125,93 @@ defmodule NightShift.Members do
           {:ok, Member.t()}
           | {:error, :forbidden | :last_manager | :already_inactive}
           | {:error, Ecto.Changeset.t()}
-  def deactivate_member(%Member{}, %Member{}), do: raise("not implemented")
+  def deactivate_member(%Member{} = actor, %Member{} = target) do
+    with {:ok, actor} <- still_active(actor),
+         true <- actor.role == :manager,
+         true <- actor.tenant_id == target.tenant_id,
+         {:ok, member} <- Repo.transaction(fn -> deactivate(target) end) do
+      broadcast_deactivation(member)
+      {:ok, member}
+    else
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :forbidden}
+    end
+  end
+
+  # Broadcast only after the transaction commits: a subscriber that reacted to an
+  # uncommitted deactivation could re-resolve the member and still find it active.
+  defp broadcast_deactivation(%Member{} = member) do
+    tenant = Repo.get!(Tenant, member.tenant_id)
+
+    Phoenix.PubSub.broadcast(
+      NightShift.PubSub,
+      Tenancy.topic(tenant, :members),
+      {:member_deactivated, member.id}
+    )
+  end
+
+  # Invariant 3 fixes *identity* — which tenant, which member — at the session
+  # boundary and forbids re-deriving it. It does not fix *liveness*: a member
+  # deactivated after the acting member was loaded must not still be able to act,
+  # including from a session already open (invariant 4). Re-reading a member by
+  # its own id is not deriving identity from an untrusted source.
+  defp still_active(%Member{id: id}) do
+    case Repo.get(Member, id) do
+      %Member{active: true} = member -> {:ok, member}
+      _ -> :error
+    end
+  end
+
+  # One locking read covers both questions this has to answer — is the target
+  # still active, and is it the tenant's last active manager — so a concurrent
+  # deactivation cannot see a spare manager that this one is about to remove.
+  # Ordering by id keeps two such transactions from deadlocking.
+  defp deactivate(%Member{} = target) do
+    rows =
+      Member
+      |> where([m], m.tenant_id == ^target.tenant_id)
+      |> where([m], m.id == ^target.id or (m.active and m.role == :manager))
+      |> order_by(asc: :id)
+      |> lock("FOR UPDATE")
+      |> Repo.all()
+
+    current = Enum.find(rows, &(&1.id == target.id))
+    active_managers = Enum.filter(rows, &(&1.active and &1.role == :manager))
+
+    cond do
+      is_nil(current) ->
+        Repo.rollback(:forbidden)
+
+      not current.active ->
+        Repo.rollback(:already_inactive)
+
+      current.role == :manager and length(active_managers) <= 1 ->
+        Repo.rollback(:last_manager)
+
+      true ->
+        case Repo.update(Member.deactivation_changeset(current)) do
+          {:ok, member} -> member
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+    end
+  end
+
+  # `site_id` cannot be a foreign key: `sites` lives in the tenant schema and
+  # `members` in `public`. This is the only thing keeping the two in step.
+  defp validate_site_of_tenant(changeset, tenant) do
+    case Ecto.Changeset.get_change(changeset, :site_id) do
+      nil ->
+        changeset
+
+      site_id ->
+        exists? =
+          Site
+          |> where(id: ^site_id)
+          |> Repo.exists?(prefix: Tenancy.prefix(tenant))
+
+        if exists?,
+          do: changeset,
+          else: Ecto.Changeset.add_error(changeset, :site_id, "is not a site of this tenant")
+    end
+  end
 end

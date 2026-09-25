@@ -94,6 +94,17 @@ defmodule NightShiftWeb.Router do
       on_mount: [{NightShiftWeb.UserAuth, :ensure_authenticated}] do
       live "/users/settings", UserSettingsLive, :edit
       live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
+      live "/no-access", NoAccessLive, :show
+    end
+
+    # No route carries a tenant. The tenant and the acting member come from the
+    # session, through `TenantAuth`, and nowhere else.
+    live_session :require_active_member,
+      on_mount: [
+        {NightShiftWeb.UserAuth, :ensure_authenticated},
+        {NightShiftWeb.TenantAuth, :require_active_member}
+      ] do
+      live "/workspace", WorkspaceLive, :show
     end
   end
 

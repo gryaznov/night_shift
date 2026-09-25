@@ -14,6 +14,8 @@ defmodule NightShift.Members.Member do
 
   use Ecto.Schema
 
+  import Ecto.Changeset
+
   alias NightShift.Accounts.User
   alias NightShift.Tenants.Tenant
 
@@ -38,6 +40,38 @@ defmodule NightShift.Members.Member do
     field :deactivated_at, :utc_datetime
 
     timestamps(type: :utc_datetime)
+  end
+
+  @doc """
+  Changeset for a new member.
+
+  `tenant_id` is an argument rather than a castable field: a member's tenant can
+  then never arrive from a param, a path or a client event.
+
+  Requires a site, a team and a role, so a member without all three cannot be
+  written.
+  """
+  @spec create_changeset(t(), map(), Ecto.UUID.t()) :: Ecto.Changeset.t()
+  def create_changeset(member, attrs, tenant_id) do
+    member
+    |> cast(attrs, [:user_id, :site_id, :team, :role])
+    |> put_change(:tenant_id, tenant_id)
+    |> validate_required([:user_id, :tenant_id, :site_id, :team, :role])
+    |> unique_constraint([:user_id, :tenant_id],
+      message: "already has a member record in this tenant"
+    )
+    |> foreign_key_constraint(:user_id)
+    |> foreign_key_constraint(:tenant_id)
+    |> check_constraint(:team, name: :team_is_known)
+    |> check_constraint(:role, name: :role_is_known)
+  end
+
+  @doc """
+  Changeset ending a member's access. Keeps the record; nothing is deleted.
+  """
+  @spec deactivation_changeset(t()) :: Ecto.Changeset.t()
+  def deactivation_changeset(member) do
+    change(member, active: false, deactivated_at: DateTime.utc_now(:second))
   end
 
   @doc "The teams a member can belong to."

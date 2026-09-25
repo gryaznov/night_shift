@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mix test)",
+      "Bash(mix test *)",
+      "Bash(mix compile *)",
+      "Bash(mix format)",
+      "Bash(mix format *)",
+      "Bash(mix sobelow *)",
+      "Bash(mix deps.get)",
+      "Bash(mix ecto.migrate)",
+      "Bash(mix triplex.migrate)"
+    ],
+    "ask": [
+      "Edit(priv/repo/migrations/**)",
+      "Edit(priv/repo/tenant_migrations/**)",
+      "Bash(mix ecto.reset)",
+      "Bash(mix ecto.rollback *)",
+      "Bash(mix deps.update *)"
+    ],
+    "deny": [
+      "Bash(mix ecto.drop)",
+      "Bash(mix ecto.drop *)",
+      "Bash(mix triplex.rollback *)",
+      "Read(config/*.secret.exs)"
+    ]
+  }
+}

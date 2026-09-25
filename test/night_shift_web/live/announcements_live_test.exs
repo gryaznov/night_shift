@@ -428,17 +428,13 @@ defmodule NightShiftWeb.AnnouncementsLiveTest do
 
       conn = log_in_user(conn, manager_user)
 
-      assert_error_sent 404, fn ->
-        get(conn, "/announcements/#{announcement.id}/edit")
-      end
+      assert get(conn, "/announcements/#{announcement.id}/edit").status == 404
 
-      assert_error_sent 404, fn ->
-        put(conn, "/announcements/#{announcement.id}", %{"announcement" => %{"body" => "x"}})
-      end
+      assert put(conn, "/announcements/#{announcement.id}", %{
+               "announcement" => %{"body" => "x"}
+             }).status == 404
 
-      assert_error_sent 404, fn ->
-        delete(conn, "/announcements/#{announcement.id}")
-      end
+      assert delete(conn, "/announcements/#{announcement.id}").status == 404
     end
   end
 end
